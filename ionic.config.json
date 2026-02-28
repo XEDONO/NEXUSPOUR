@@ -1,0 +1,7 @@
+{
+  "name": "CafeOps",
+  "integrations": {
+    "capacitor": {}
+  },
+  "type": "react-vite"
+}

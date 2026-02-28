@@ -1,0 +1,784 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  IonContent,
+  IonPage,
+  IonIcon,
+  IonAvatar,
+  IonRippleEffect,
+  IonProgressBar,
+  IonBadge,
+  IonButton
+} from '@ionic/react';
+import {
+  chevronBackOutline,
+  settingsOutline,
+  notificationsOutline,
+  cafeOutline,
+  thermometerOutline,
+  home,
+  trashOutline,
+  saveOutline,
+  chevronBack,
+  chevronForward,
+  closeOutline,
+  timeOutline,
+  addOutline,
+  clipboardOutline,
+  albumsOutline,
+  constructOutline,
+  calendarOutline,
+  checkmarkCircle
+} from 'ionicons/icons';
+import { useHistory } from 'react-router-dom';
+
+type FridgeTemplate = { id: string; location: string; expectedMin: number; expectedMax: number };
+
+type TemperatureReading = {
+  id: string;
+  location: string;
+  expectedMin: number;
+  expectedMax: number;
+  reading: string;
+  timestamp: string;
+  pass: boolean;
+};
+
+type DailyLog = {
+  date: string;
+  readings: TemperatureReading[];
+};
+
+const MASTER_FRIDGES_KEY = 'master_fridges_v1';
+const TEMP_LOGS_KEY = 'temp_logs_v2';
+const RESERVED_KEY = 'cafeops_reserved_archives_v1';
+
+const STORAGE_KEYS = [
+  'temp_logs_v2', 'checklist', 'checklist_logs_v1',
+  'stock_list', 'inventory_logs_v1', 'cafe_sections_v1', 'master_fridges_v1', 'allergens_map_v1'
+];
+
+const DEFAULT_FRIDGES: FridgeTemplate[] = [
+  { id: 'fridge-1', location: 'Main Fridge', expectedMin: 2, expectedMax: 5 },
+  { id: 'fridge-2', location: 'Milk Fridge', expectedMin: 2, expectedMax: 5 },
+  { id: 'fridge-3', location: 'Display Fridge', expectedMin: 2, expectedMax: 5 },
+  { id: 'freezer-a', location: 'Main Freezer', expectedMin: -20, expectedMax: -15 },
+  { id: 'freezer-b', location: 'Ice Cream Freezer', expectedMin: -20, expectedMax: -15 },
+];
+
+const getStartOfWeek = (date: Date) => {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  const monday = new Date(d.setDate(diff));
+  monday.setHours(0, 0, 0, 0);
+  return monday;
+};
+
+const getWeekDays = (startDate: Date) => {
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(startDate);
+    d.setDate(startDate.getDate() + i);
+    return d.toISOString().split('T')[0];
+  });
+};
+
+const TempCheck: React.FC = () => {
+  const history = useHistory();
+  const [currentWeekStart, setCurrentWeekStart] = useState(() => getStartOfWeek(new Date()));
+  const [logs, setLogs] = useState<DailyLog[]>(() => {
+    try { return JSON.parse(localStorage.getItem(TEMP_LOGS_KEY) || '[]'); } catch { return []; }
+  });
+  const [masterFridges, setMasterFridges] = useState<FridgeTemplate[]>(() => {
+    try {
+      const stored = localStorage.getItem(MASTER_FRIDGES_KEY);
+      return stored ? JSON.parse(stored) : DEFAULT_FRIDGES;
+    } catch {
+      return DEFAULT_FRIDGES;
+    }
+  });
+
+  const [showAddFridgeModal, setShowAddFridgeModal] = useState(false);
+  const [showManageUnitsModal, setShowManageUnitsModal] = useState(false);
+  const [showAdminSidebar, setShowAdminSidebar] = useState(false);
+  const [newFridgeName, setNewFridgeName] = useState('');
+  const [newFridgeMinTemp, setNewFridgeMinTemp] = useState('2');
+  const [newFridgeMaxTemp, setNewFridgeMaxTemp] = useState('5');
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setIsLoaded(true), 150);
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem(MASTER_FRIDGES_KEY, JSON.stringify(masterFridges));
+  }, [masterFridges]);
+
+  useEffect(() => {
+    localStorage.setItem(TEMP_LOGS_KEY, JSON.stringify(logs));
+  }, [logs]);
+
+  const weekDays = useMemo(() => getWeekDays(currentWeekStart), [currentWeekStart]);
+
+  const handleReadingChange = (date: string, fridgeId: string, value: string) => {
+    const fridge = masterFridges.find(f => f.id === fridgeId);
+    if (!fridge) return;
+
+    const temp = parseFloat(value);
+    const pass = !isNaN(temp) && temp >= fridge.expectedMin && temp <= fridge.expectedMax;
+
+    setLogs(prevLogs => {
+      const newLogs = [...prevLogs];
+      let dayLogIndex = newLogs.findIndex(l => l.date === date);
+
+      if (dayLogIndex === -1) {
+        newLogs.push({
+          date,
+          readings: masterFridges.map(mf => ({
+            id: mf.id,
+            location: mf.location,
+            expectedMin: mf.expectedMin,
+            expectedMax: mf.expectedMax,
+            reading: mf.id === fridgeId ? value : '',
+            timestamp: date,
+            pass: mf.id === fridgeId ? pass : false
+          }))
+        });
+      } else {
+        const dayLog = { ...newLogs[dayLogIndex] };
+        const updatedReadings = [...dayLog.readings];
+        const readingIndex = updatedReadings.findIndex(r => r.id === fridgeId);
+
+        if (readingIndex === -1) {
+           updatedReadings.push({
+             id: fridge.id,
+             location: fridge.location,
+             expectedMin: fridge.expectedMin,
+             expectedMax: fridge.expectedMax,
+             reading: value,
+             timestamp: date,
+             pass
+           });
+        } else {
+           updatedReadings[readingIndex] = {
+             ...updatedReadings[readingIndex],
+             reading: value,
+             pass
+           };
+        }
+        dayLog.readings = updatedReadings;
+        newLogs[dayLogIndex] = dayLog;
+      }
+      return newLogs;
+    });
+  };
+
+  const getReadingValue = (date: string, fridgeId: string) => {
+    const dayLog = logs.find(l => l.date === date);
+    if (!dayLog) return '';
+    const reading = dayLog.readings.find(r => r.id === fridgeId);
+    return reading ? reading.reading : '';
+  };
+
+  const isPassing = (date: string, fridgeId: string) => {
+    const val = getReadingValue(date, fridgeId);
+    if (!val) return null;
+    const dayLog = logs.find(l => l.date === date);
+    const reading = dayLog?.readings.find(r => r.id === fridgeId);
+    return reading ? reading.pass : null;
+  };
+
+  const changeWeek = (direction: number) => {
+    setSlideDirection(direction > 0 ? 'left' : 'right');
+    setIsTransitioning(true);
+
+    setTimeout(() => {
+      const newDate = new Date(currentWeekStart);
+      newDate.setDate(newDate.getDate() + (direction * 7));
+      setCurrentWeekStart(newDate);
+
+      setTimeout(() => {
+        setIsTransitioning(false);
+        setSlideDirection(null);
+      }, 50);
+    }, 250);
+  };
+
+  const addFridge = () => {
+    const name = newFridgeName.trim();
+    const minTemp = parseFloat(newFridgeMinTemp);
+    const maxTemp = parseFloat(newFridgeMaxTemp);
+    if (!name || isNaN(minTemp) || isNaN(maxTemp)) return;
+
+    const newFridge: FridgeTemplate = {
+      id: `fridge-${Date.now()}`,
+      location: name,
+      expectedMin: minTemp,
+      expectedMax: maxTemp
+    };
+
+    setMasterFridges([...masterFridges, newFridge]);
+    setNewFridgeName('');
+    setShowAddFridgeModal(false);
+  };
+
+  const deleteFridge = (id: string) => {
+    if (window.confirm('Delete this unit? All historical readings for this unit in the table view will be hidden.')) {
+      setMasterFridges(masterFridges.filter(f => f.id !== id));
+    }
+  };
+
+  const saveAndReserve = () => {
+    localStorage.setItem(TEMP_LOGS_KEY, JSON.stringify(logs));
+
+    const allData: Record<string, any> = {};
+    STORAGE_KEYS.forEach(key => {
+      const value = localStorage.getItem(key);
+      allData[key] = value ? JSON.parse(value) : null;
+    });
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const archivesString = localStorage.getItem(RESERVED_KEY);
+    const archives = archivesString ? JSON.parse(archivesString) : [];
+
+    const newArchive = {
+      name: `Weekly Temp Backup (${timestamp})`,
+      data: allData,
+      date: new Date().toLocaleString()
+    };
+
+    localStorage.setItem(RESERVED_KEY, JSON.stringify([newArchive, ...archives].slice(0, 15)));
+
+    const header = ['Unit', 'Range', ...weekDays].join(',');
+    const rows = masterFridges.map(mf => {
+      const range = `${mf.expectedMin}-${mf.expectedMax}`;
+      const values = weekDays.map(date => getReadingValue(date, mf.id) || 'N/A');
+      return [`"${mf.location}"`, `"${range}"`, ...values].join(',');
+    });
+
+    const csvContent = [header, ...rows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Weekly-Temps-${weekDays[0]}-to-${weekDays[6]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    alert('Data secured, reserved in Archive, and exported.');
+  };
+
+  const getDayPassCount = (date: string) => {
+    const dayLog = logs.find(l => l.date === date);
+    return dayLog ? dayLog.readings.filter(r => r.pass).length : 0;
+  };
+
+  return (
+    <IonPage>
+      <style>{`
+        :root {
+          --m3-surface: #FDFCF4;
+          --m3-primary: #2D1B14;
+          --m3-accent: #D6E8B1;
+          --m3-success: #4caf50;
+          --m3-error: #B3261E;
+          --m3-success-bg: #E8F5E9;
+          --m3-error-bg: #FFEBEE;
+        }
+
+        .temp-main {
+          --background: var(--m3-surface);
+          display: flex;
+          flex-direction: column;
+          height: 100vh;
+          align-items: center;
+        }
+
+        /* Coffee Splash Header */
+        .header-espresso {
+          background: #2D1B14;
+          padding: 45px 24px 80px;
+          color: white;
+          width: 100%;
+          position: relative;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+          flex-shrink: 0;
+        }
+
+        .header-espresso::after {
+          content: '';
+          position: absolute;
+          bottom: 0;
+          left: 0;
+          width: 100%;
+          height: 40px;
+          background: var(--m3-surface);
+          clip-path: polygon(0% 100%, 100% 100%, 100% 40%, 85% 60%, 70% 40%, 55% 70%, 40% 30%, 25% 60%, 10% 40%, 0% 70%);
+        }
+
+        .top-nav-row {
+          display: flex;
+          justifyContent: space-between;
+          alignItems: center;
+          width: 100%;
+          max-width: 1000px;
+          z-index: 10;
+        }
+
+        .logo-group {
+          display: flex;
+          alignItems: center;
+          gap: 12px;
+        }
+
+        .logo-badge {
+          background: #E6BEAE;
+          width: 44px;
+          height: 44px;
+          border-radius: 12px;
+          display: flex;
+          alignItems: center;
+          justifyContent: center;
+          color: #2D1B14;
+          box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }
+
+        .logo-text-m3 {
+          font-weight: 900;
+          font-size: 1.6rem;
+          letter-spacing: -1px;
+          color: white;
+        }
+
+        .header-tools {
+          display: flex;
+          alignItems: center;
+          gap: 10px;
+        }
+
+        .action-btn-m3 {
+          width: 44px;
+          height: 44px;
+          border-radius: 50%;
+          background: rgba(255, 255, 255, 0.1);
+          color: white;
+          display: flex;
+          alignItems: center;
+          justify-content: center;
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          position: relative;
+        }
+
+        .page-title-section {
+          margin-top: 35px;
+          text-align: center;
+          z-index: 10;
+          opacity: 0;
+          transform: translateY(15px);
+          transition: all 0.8s ease-out;
+          width: 100%;
+          max-width: 800px;
+        }
+
+        .page-title-section.visible {
+          opacity: 1;
+          transform: translateY(0);
+        }
+
+        .content-scroll {
+          padding: 40px 20px 150px;
+          margin-top: -40px;
+          flex: 1;
+          width: 100%;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+        }
+
+        .control-panel-centered {
+          width: 100%;
+          max-width: 900px;
+          background: white;
+          border-radius: 32px;
+          padding: 24px;
+          margin-bottom: 24px;
+          box-shadow: 0 4px 20px rgba(45, 27, 20, 0.05);
+          border: 1px solid #E1E3D3;
+        }
+
+        .week-nav-container {
+          display: flex;
+          alignItems: center;
+          justifyContent: space-between;
+          background: #F8F5F2;
+          padding: 12px 20px;
+          border-radius: 20px;
+          margin-bottom: 20px;
+        }
+
+        .nav-arrow-btn {
+          width: 40px;
+          height: 40px;
+          border-radius: 12px;
+          background: white;
+          border: none;
+          color: #2D1B14;
+          display: flex;
+          alignItems: center;
+          justifyContent: center;
+          box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+
+        .table-viewport-centered {
+          width: 100%;
+          max-width: 900px;
+          overflow-x: auto;
+          background: white;
+          border-radius: 28px;
+          border: 1px solid #E1E3D3;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+          transition: all 0.3s ease;
+        }
+
+        .table-viewport-centered.sliding { opacity: 0; transform: translateY(10px); }
+
+        table { width: 100%; border-collapse: collapse; min-width: 850px; table-layout: fixed; }
+
+        th {
+          background: #FDFCF4;
+          padding: 16px 8px;
+          font-size: 0.75rem;
+          font-weight: 900;
+          color: #2D1B14;
+          border-bottom: 2px solid #E1E3D3;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+          text-align: center;
+        }
+
+        .sticky-unit-col {
+          width: 180px;
+          position: sticky;
+          left: 0;
+          background: #FFFFFF;
+          z-index: 10;
+          border-right: 2px solid #E1E3D3;
+          padding-left: 20px;
+          text-align: left;
+        }
+
+        .cell-input-m3 {
+          width: 100%;
+          border: none;
+          padding: 20px 4px;
+          text-align: center;
+          font-weight: 900;
+          font-size: 1.1rem;
+          background: transparent;
+          outline: none;
+          transition: all 0.2s;
+        }
+
+        .cell-input-m3.pass { background: var(--m3-success-bg); color: var(--m3-success); }
+        .cell-input-m3.fail { background: var(--m3-error-bg); color: var(--m3-error); }
+        .cell-input-m3:focus { background: #F3F4E9; box-shadow: inset 0 0 0 2px #D6E8B1; }
+
+        .m3-tab-nav {
+          background: #ffffff;
+          height: 80px;
+          display: flex;
+          border-top: 1px solid #E1E3D3;
+          padding-bottom: env(safe-area-inset-bottom);
+          box-shadow: 0 -4px 20px rgba(0,0,0,0.04);
+          width: 100%;
+          justifyContent: space-around;
+          position: fixed;
+          bottom: 0;
+          z-index: 100;
+        }
+
+        .nav-btn-tab {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          alignItems: center;
+          justifyContent: center;
+          color: #A1887F;
+          font-size: 0.75rem;
+          font-weight: 800;
+          text-decoration: none;
+        }
+
+        .nav-btn-tab.active { color: #2D1B14; }
+
+        .nav-indicator-pill {
+          padding: 6px 24px;
+          border-radius: 100px;
+          display: flex;
+          alignItems: center;
+          justify-content: center;
+          transition: all 0.3s ease;
+          margin-bottom: 4px;
+        }
+
+        .nav-btn-tab.active .nav-indicator-pill { background: #2D1B1412; transform: translateY(-2px); }
+
+        .fab-save-centered {
+          position: fixed;
+          bottom: 105px;
+          right: 20px;
+          width: 64px;
+          height: 64px;
+          border-radius: 20px;
+          background: #2D1B14;
+          color: white;
+          display: flex;
+          alignItems: center;
+          justify-content: center;
+          box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+          z-index: 1500;
+          border: none;
+        }
+
+        .fab-save-centered:active { transform: scale(0.9); }
+
+        .modal-blur-overlay {
+          position: fixed; inset: 0; background: rgba(0,0,0,0.4); backdrop-filter: blur(8px);
+          display: flex; align-items: center; justify-content: center; z-index: 5000; padding: 20px;
+        }
+
+        .m3-dialog-sheet {
+          background: white; width: 100%; max-width: 400px; border-radius: 35px; padding: 32px;
+          box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+        }
+
+        .unit-manage-item {
+          display: flex; justifyContent: space-between; alignItems: center;
+          padding: 16px 20px; background: #F8F5F2; border-radius: 20px; margin-bottom: 10px;
+        }
+
+        .delete-btn-m3 {
+          width: 40px;
+          height: 40px;
+          border-radius: 12px;
+          background: #4caf50;
+          color: white;
+          display: flex;
+          alignItems: center;
+          justify-content: center;
+          border: none;
+          box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+
+        .pass-total-indicator {
+          background: #2D1B14;
+          color: white;
+          padding: 12px 24px;
+          border-radius: 100px;
+          font-weight: 900;
+          font-size: 0.9rem;
+          display: inline-flex;
+          alignItems: center;
+          gap: 10px;
+          box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+          border: 2px solid white;
+        }
+      `}</style>
+
+      <IonContent scrollY={true}>
+        <div className="temp-main">
+          <header className="header-espresso">
+            <div className="top-nav-row">
+              <div className="logo-group">
+                <div className="logo-badge">
+                  <IonIcon icon={cafeOutline} />
+                </div>
+                <span className="logo-text-m3">NexusPour</span>
+              </div>
+              <div className="header-tools">
+                <button className="action-btn-m3" onClick={() => setShowAdminSidebar(true)}>
+                  <IonIcon icon={settingsOutline} style={{ fontSize: '1.5rem' }} />
+                </button>
+                <IonAvatar style={{ width: '42px', height: '42px', border: '2px solid rgba(255,255,255,0.2)', marginLeft: '8px' }}>
+                  <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Coffee" alt="Profile" />
+                </IonAvatar>
+              </div>
+            </div>
+
+            <div className={`page-title-section ${isLoaded ? 'visible' : ''}`}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px' }}>
+                <button className="action-btn-m3" onClick={() => history.goBack()}>
+                  <IonIcon icon={chevronBackOutline} />
+                </button>
+                <h1 style={{ margin: 0, fontSize: '2rem', fontWeight: 800 }}>Temperature Monitoring</h1>
+              </div>
+              <div style={{ marginTop: '24px' }}>
+                <div className="pass-total-indicator">
+                   <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#81C784', boxShadow: '0 0 8px #81C784' }}></div>
+                   TODAY'S PASS RATE: {passCount} / {totalCount}
+                </div>
+              </div>
+            </div>
+          </header>
+
+          <main className="content-scroll">
+            <section className="control-panel-centered">
+              <div className="week-nav-container">
+                <button className="nav-arrow-btn" onClick={() => changeWeek(-1)}><IonIcon icon={chevronBack} /></button>
+                <div style={{ textAlign: 'center', cursor: 'pointer' }} onClick={() => (document.getElementById('temp-date-trigger') as HTMLInputElement)?.showPicker()}>
+                  <span style={{ fontSize: '0.65rem', fontWeight: 900, color: '#8D6E63', letterSpacing: '1px', display: 'block' }}>OPERATIONAL WINDOW</span>
+                  <div style={{ fontWeight: 800, color: '#2D1B14', fontSize: '1rem' }}>
+                    {new Date(weekDays[0]).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })} — {new Date(weekDays[6]).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
+                  </div>
+                  <input id="temp-date-trigger" type="date" style={{ position: 'absolute', opacity: 0, pointerEvents: 'none' }} onChange={(e) => setCurrentWeekStart(getStartOfWeek(new Date(e.target.value)))} />
+                </div>
+                <button className="nav-arrow-btn" onClick={() => changeWeek(1)}><IonIcon icon={chevronForward} /></button>
+              </div>
+              <IonProgressBar value={progress} color="success" style={{ height: '10px', borderRadius: '5px' }} />
+            </section>
+
+            <div className={`table-viewport-centered ${isTransitioning ? 'sliding' : ''}`}>
+              <table>
+                <thead>
+                  <tr>
+                    <th className="sticky-unit-col">UNIT</th>
+                    {['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'].map((d, i) => (
+                      <th key={d}>{d}<br/><span style={{ opacity: 0.5, fontSize: '0.6rem' }}>{weekDays[i].split('-')[2]}/{weekDays[i].split('-')[1]}</span></th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {masterFridges.map(mf => (
+                    <tr key={mf.id}>
+                      <td className="sticky-unit-col">
+                        <div style={{ fontWeight: 900, fontSize: '0.9rem', color: '#2D1B14' }}>{mf.location}</div>
+                        <div style={{ fontSize: '10px', fontWeight: 700, color: '#8D6E63' }}>{mf.expectedMin}° to {mf.expectedMax}°C</div>
+                      </td>
+                      {weekDays.map(date => {
+                        const pass = isPassing(date, mf.id);
+                        return (
+                          <td key={date}>
+                            <input
+                              type="number"
+                              placeholder="-"
+                              className={`cell-input-m3 ${pass === true ? 'pass' : pass === false ? 'fail' : ''}`}
+                              value={getReadingValue(date, mf.id)}
+                              onChange={(e) => handleReadingChange(date, mf.id, e.target.value)}
+                            />
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </main>
+        </div>
+
+        <button className="fab-save-centered ion-activatable relative" onClick={saveAndReserve}>
+          <IonIcon icon={saveOutline} style={{ fontSize: '2rem' }} />
+          <IonRippleEffect />
+        </button>
+      </IonContent>
+
+      <div className="m3-tab-nav">
+        <div className="nav-btn-tab" onClick={() => history.push('/dashboard')}>
+          <div className="nav-indicator-pill"><IonIcon icon={home} /></div>
+          <span>Home</span>
+        </div>
+        <div className="nav-btn-tab active">
+          <div className="nav-indicator-pill"><IonIcon icon={thermometerOutline} /></div>
+          <span>Temps</span>
+        </div>
+        <div className="nav-btn-tab" onClick={() => history.push('/checklist')}>
+          <div className="nav-indicator-pill"><IonIcon icon={clipboardOutline} /></div>
+          <span>Checks</span>
+        </div>
+        <div className="nav-btn-tab" onClick={() => history.push('/inventory')}>
+          <div className="nav-indicator-pill"><IonIcon icon={albumsOutline} /></div>
+          <span>Stock</span>
+        </div>
+      </div>
+
+      <div className={`backdrop-scrim ${showAdminSidebar ? 'active' : ''}`} onClick={() => setShowAdminSidebar(false)} />
+      <aside className={`sidebar-sheet ${showAdminSidebar ? 'active' : ''}`}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px' }}>
+          <h2 style={{ fontWeight: 900, margin: 0, fontSize: '1.8rem', color: '#2D1B14' }}>Settings</h2>
+          <button className="action-btn-m3" style={{ background: '#F8F5F2', color: '#2D1B14', border: 'none' }} onClick={() => setShowAdminSidebar(false)}>
+            <IonIcon icon={closeOutline} style={{ fontSize: '2rem' }} />
+          </button>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+          <div className="unit-manage-item" style={{ background: '#2D1B14', color: 'white' }} onClick={() => { history.push('/history'); setShowAdminSidebar(false); }}>
+            <IonIcon icon={timeOutline} style={{ fontSize: '1.5rem' }} />
+            <span style={{ fontWeight: 800 }}>History Logs</span>
+          </div>
+          <div className="unit-manage-item" onClick={() => { setShowAdminSidebar(false); setShowManageUnitsModal(true); }}>
+            <IonIcon icon={constructOutline} style={{ fontSize: '1.5rem', color: '#2D1B14' }} />
+            <span style={{ fontWeight: 800, color: '#2D1B14' }}>Manage Units</span>
+          </div>
+          <div className="unit-manage-item" onClick={() => { setShowAdminSidebar(false); setShowAddFridgeModal(true); }}>
+            <IonIcon icon={addOutline} style={{ fontSize: '1.5rem', color: '#2D1B14' }} />
+            <span style={{ fontWeight: 800, color: '#2D1B14' }}>Add New Unit</span>
+          </div>
+        </div>
+      </aside>
+
+      {showAddFridgeModal && (
+        <div className="modal-blur-overlay" onClick={() => setShowAddFridgeModal(false)}>
+          <div className="m3-dialog-sheet" onClick={e => e.stopPropagation()}>
+            <h2 style={{ fontWeight: 900, margin: '0 0 24px', fontSize: '1.8rem' }}>Setup Unit</h2>
+            <label className="m3-label">Equipment Name</label>
+            <input placeholder="e.g. Back Fridge" value={newFridgeName} onChange={e => setNewFridgeName(e.target.value)} className="m3-input-field" />
+            <div className="flex gap-4">
+              <div style={{ flex: 1 }}>
+                <label className="m3-label">Min °C</label>
+                <input type="number" value={newFridgeMinTemp} onChange={e => setNewFridgeMinTemp(e.target.value)} className="m3-input-field" style={{ textAlign: 'center' }} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label className="m3-label">Max °C</label>
+                <input type="number" value={newFridgeMaxTemp} onChange={e => setNewFridgeMaxTemp(e.target.value)} className="m3-input-field" style={{ textAlign: 'center' }} />
+              </div>
+            </div>
+            <div className="btn-row">
+              <button className="btn-m3 text" onClick={() => setShowAddFridgeModal(false)}>DISMISS</button>
+              <button className="btn-m3 primary" onClick={addFridge}>CREATE</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showManageUnitsModal && (
+        <div className="modal-blur-overlay" onClick={() => setShowManageUnitsModal(false)}>
+          <div className="m3-dialog-sheet" onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
+              <h3 style={{ fontWeight: 900, margin: 0, fontSize: '1.8rem' }}>Active Units</h3>
+              <button className="action-btn-m3" style={{ background: '#F8F5F2', color: '#2D1B14', border: 'none' }} onClick={() => setShowManageUnitsModal(false)}><IonIcon icon={closeOutline} /></button>
+            </div>
+            <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+              {masterFridges.map(f => (
+                <div key={f.id} className="unit-manage-item">
+                  <div>
+                    <div style={{ fontWeight: 900, color: '#2D1B14' }}>{f.location}</div>
+                    <div style={{ fontSize: '10px', fontWeight: 700, color: '#8D6E63' }}>{f.expectedMin}° to {f.expectedMax}°C</div>
+                  </div>
+                  <button className="delete-btn-m3" onClick={() => deleteFridge(f.id)}><IonIcon icon={trashOutline} /></button>
+                </div>
+              ))}
+            </div>
+            <button className="btn-m3 primary" style={{ width: '100%', marginTop: '24px' }} onClick={() => setShowManageUnitsModal(false)}>DONE</button>
+          </div>
+        </div>
+      )}
+    </div>
+  </IonPage>
+  );
+};
+
+export default TempCheck;

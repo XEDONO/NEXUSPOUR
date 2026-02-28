@@ -1,0 +1,300 @@
+/* Material Design 3 Android Theme */
+
+/* Primary Material card with proper elevation */
+.card {
+	background: #ffffff;
+	border-radius: 12px;
+	box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+	border: none;
+	transition: all 0.2s ease;
+}
+
+.card:hover {
+	box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+/* Material Button */
+.btn-primary, .btn, button {
+	border-radius: 8px;
+	font-weight: 500;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+	transition: all 0.2s ease;
+	border: none;
+	cursor: pointer;
+}
+
+.btn-primary {
+	background: linear-gradient(135deg, #1976d2 0%, #1565c0 100%);
+	color: white;
+	padding: 12px 24px;
+}
+
+.btn-primary:active {
+	transform: scale(0.98);
+	box-shadow: 0 2px 4px rgba(25, 118, 210, 0.4);
+}
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+	/* Color tokens (customizable via Settings) */
+	/* Angular Material 1.x Style Palette (Classic) */
+	--primary: #4CAF50;      /* Material Green 500 */
+	--primary-dark: #388E3C; /* Material Green 700 */
+	--accent: #795548;       /* Material Brown 500 */
+	--warn: #F44336;
+
+	--bg: linear-gradient(135deg, #93c572 0%, #fff8e1 100%); /* Vibrant Pistachio & Cream */
+	--surface: #ffffff;
+	--text-main: rgba(0, 0, 0, 0.87);
+	--muted: rgba(0, 0, 0, 0.54);
+	--border-color: rgba(0, 0, 0, 0.12);
+
+	/* Layout tokens */
+	--radius: 16px; /* Rounded corners for sections */
+	--shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24); /* z-depth-1 */
+	--shadow-2: 0 3px 6px rgba(0,0,0,0.16), 0 3px 6px rgba(0,0,0,0.23); /* z-depth-2 */
+	--shadow-3: 0 10px 20px rgba(0,0,0,0.19), 0 6px 6px rgba(0,0,0,0.23); /* z-depth-3 */
+
+	/* Typography (scaleable) */
+	--font-sans: 'Roboto', system-ui, -apple-system, sans-serif;
+	--base-font-size: 14px; /* Dense information density */
+	--heading-scale: 1.25; /* multiply for headings */
+
+	/* Icon tokens */
+	--icon-size: 24px;
+	--icon-density: 1; /* 1 = normal, >1 more icons shown where applicable */
+}
+
+@layer base {
+	html, body, #root { height: 100%; }
+	html { font-family: 'Roboto', system-ui, -apple-system, sans-serif; }
+	body {
+		background: var(--bg);
+		color: var(--text-main);
+		-webkit-font-smoothing: antialiased;
+		-moz-osx-font-smoothing: grayscale;
+	}
+
+	h1, h2, h3, h4, h5, h6 { margin-top: 0; margin-bottom: 16px; font-weight: 500; line-height: 1.2; }
+	h1 { font-size: 2.5rem; letter-spacing: -0.02em; }
+	h2 { font-size: 2rem; letter-spacing: -0.01em; }
+	h3 { font-size: 1.5rem; }
+	p { margin-bottom: 16px; line-height: 1.6; }
+	/* Ensure images and other content respect spacing */
+	img { display: block; max-width: 100%; }
+
+	/* micro-interactions */
+	@keyframes rise {
+		from { opacity: 0; transform: translateY(8px) scale(.995); }
+		to { opacity: 1; transform: translateY(0) scale(1); }
+	}
+
+	.animate-entrance {
+		animation: rise .48s cubic-bezier(.2,.9,.3,1) both;
+	}
+
+	.pulse {
+		animation: pulse 2.2s infinite;
+	}
+
+	@keyframes pulse {
+		0% { transform: translateY(0) scale(1); box-shadow: 0 8px 20px rgba(16,24,40,0.05); }
+		50% { transform: translateY(-2px) scale(1.01); box-shadow: 0 14px 30px rgba(16,24,40,0.08); }
+		100% { transform: translateY(0) scale(1); box-shadow: 0 8px 20px rgba(16,24,40,0.05); }
+	}
+
+	::selection { background: var(--primary); color: white; }
+
+	/* inputs & buttons */
+	a { color: var(--primary-dark); text-decoration: none; font-weight: 500; transition: color .2s; }
+	a:hover { color: var(--accent); }
+	input, textarea, button, select { font-family: inherit; }
+	input[type='number'], input[type='text'], textarea {
+		background: transparent;
+		border-radius: 0;
+		padding: 12px 0; /* More breathing room */
+		border: none;
+		border-bottom: 1px solid var(--border-color);
+		color: inherit;
+		transition: box-shadow .12s ease, transform .08s ease, border-color .12s ease;
+		margin-bottom: 24px; /* Spacing between fields */
+		width: 100%;
+		box-sizing: border-box;
+	}
+	input:focus, textarea:focus {
+		outline: none;
+		box-shadow: none;
+		border-bottom: 2px solid var(--primary);
+	}
+	/* Select styling to match Angular Material inputs */
+	select {
+		background: transparent;
+		border: none;
+		border-bottom: 1px solid var(--border-color);
+		border-radius: 0;
+		padding: 12px 0;
+		width: 100%;
+		margin-bottom: 24px;
+		color: inherit;
+		font-family: inherit;
+	}
+	select:focus { outline: none; border-bottom: 2px solid var(--primary); }
+
+	/* clean card */
+	.card {
+		background: var(--surface);
+		color: var(--text-main);
+		border: none;
+		border-radius: var(--radius);
+		padding: 24px; /* Increased internal spacing */
+		margin-bottom: 24px; /* Spacing between cards */
+		box-shadow: var(--shadow);
+		transition: transform .12s ease, box-shadow .12s ease;
+	}
+
+	/* Distinct card header with background */
+	.card-header {
+		background: var(--primary);
+		color: white;
+		margin: -24px -24px 24px -24px; /* Pull to edges of card padding */
+		padding: 16px 24px;
+		border-radius: var(--radius) var(--radius) 0 0;
+		font-weight: 500;
+		font-size: 1.125rem;
+		display: flex; align-items: center;
+	}
+
+	/* Angular Material Button Style (Applied to all buttons & links acting as buttons) */
+	button, .btn {
+		display: inline-flex; align-items: center; justify-content: center;
+		background: var(--primary);
+		color: white;
+		font-weight: 500;
+		padding: 0 16px;
+		height: 44px; /* Taller for touch */
+		min-width: 44px;
+		border-radius: 10px; /* More rounded for square look */
+		box-shadow: var(--shadow);
+		text-transform: uppercase;
+		letter-spacing: 1.25px;
+		font-size: 15px;
+		border: none;
+		cursor: pointer;
+		margin: 8px;
+		margin-left: 0;
+		transition: background .15s, box-shadow .12s, color .12s;
+	}
+	button:active, .btn:active {
+		box-shadow: var(--shadow-2);
+		background: var(--primary-dark);
+		transform: translateY(1px);
+	}
+
+	/* Square button utility for consistent shape */
+	.square-btn {
+		border-radius: 10px !important;
+		min-width: 44px !important;
+		height: 44px !important;
+		padding: 0 18px !important;
+		font-size: 1rem !important;
+		box-shadow: var(--shadow);
+		display: inline-flex; align-items: center; justify-content: center;
+	}
+}
+
+@layer components {
+	.heading-display { font-weight:700; font-size:1.375rem; }
+	.muted { color: var(--muted); }
+
+	/* Professional Dashboard Icon: Gradient Container + White Icon */
+	.dashboard-icon {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 48px;  /* Matches h2/h1 visual weight */
+		height: 48px;
+		border-radius: 12px; /* Modern Squircle */
+		background: linear-gradient(135deg, var(--primary) 0%, #8BC34A 100%); /* Vibrant Green Gradient */
+		color: white;
+		box-shadow: 0 8px 16px rgba(76, 175, 80, 0.3); /* Soft colored glow */
+		flex-shrink: 0;
+	}
+	.dashboard-icon svg { width: 28px; height: 28px; fill: currentColor; }
+	.dashboard-icon.large { width: 64px; height: 64px; border-radius: 16px; }
+	.dashboard-icon.large svg { width: 36px; height: 36px; }
+}
+
+@media (max-width: 640px) {
+	.card { padding: 16px; border-radius: 2px; }
+	.card-header { margin: -16px -16px 16px -16px; border-radius: 2px 2px 0 0; padding: 12px 16px; }
+	.btn-primary { padding: 0.75rem; font-size: 0.97rem; }
+}
+
+/* Mobile helpers: container and bottom nav */
+.mobile-container { max-width: 640px; margin: 0 auto; padding-left: 1rem; padding-right: 1rem; }
+.bottom-nav {
+  position: fixed;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  max-width: 100%;
+  background: var(--surface);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-radius: 0;
+  box-shadow: var(--shadow-2);
+  padding: 0;
+  height: 56px; /* Classic Material Toolbar Height */
+  display: flex;
+  gap: 0;
+  justify-content: space-around;
+  align-items: center;
+  border: none;
+}
+.bottom-nav button{ background: transparent; border: none; padding: 8px; border-radius: 10px; display:flex; align-items:center; justify-content:center; box-shadow: none; margin: 0; min-width: auto; height: auto; }
+.fab {
+	position: fixed;
+	right: 18px;
+	bottom: 72px; /* Above bottom nav */
+	width: 56px;
+	height: 56px;
+	border-radius: 50%; /* Classic Round FAB */
+	display:flex; align-items:center; justify-content:center;
+	background: var(--accent);
+	color: white;
+	box-shadow: var(--shadow-2);
+	border: none;
+	transition: box-shadow 0.2s ease;
+	margin: 0; /* Reset global button margin */
+}
+
+/* Tablet and up adjustments */
+@media (min-width: 768px) {
+	:root {
+		--base-font-size: 14px;
+		--radius: 2px;
+		--icon-size: 24px;
+	}
+
+	.mobile-container { padding: 28px; max-width: 980px; }
+
+	.card { padding: 1.25rem; }
+
+	/* two-column helper for tablet views */
+	.grid-md-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+	/* left rail for navigation on tablet */
+	.bottom-nav { display: none; }
+	.left-rail { position: fixed; left: 18px; top: 88px; bottom: 18px; width: 84px; display:flex; flex-direction:column; gap:12px; }
+
+	.card.horizontal { display: flex; flex-direction: row; align-items: center; justify-content: space-between; }
+}
+
+/* Icon button helpers */
+.icon-btn { display: inline-flex; align-items: center; gap: 8px; }
+.icon-btn svg { width: var(--icon-size); height: var(--icon-size); }
