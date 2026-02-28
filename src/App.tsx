@@ -1,6 +1,7 @@
 import { Redirect, Route } from 'react-router-dom';
 import { IonApp, IonRouterOutlet, setupIonicReact } from '@ionic/react';
 import { IonReactRouter } from '@ionic/react-router';
+import { createHashHistory } from 'history';
 
 /* Import Pages */
 import Dashboard from './pages/Dashboard';
@@ -20,9 +21,11 @@ import './theme/variables.css';
 
 setupIonicReact();
 
+const hashHistory = createHashHistory();
+
 const App: React.FC = () => (
   <IonApp className="bg-gray-900">
-    <IonReactRouter>
+    <IonReactRouter history={hashHistory}>
       <IonRouterOutlet>
         <Route exact path="/dashboard">
           <Dashboard />
