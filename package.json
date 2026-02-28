@@ -1,5 +1,6 @@
 {
   "name": "CafeOps",
+  "homepage": "https://xedono.github.io/NEXUSPOUR/",
   "private": true,
   "version": "0.0.1",
   "type": "module",
@@ -9,7 +10,9 @@
     "preview": "vite preview",
     "test.e2e": "cypress run",
     "test.unit": "vitest",
+    "predeploy":"npm run build",
     "lint": "eslint"
+    
   },
   "dependencies": {
     "@capacitor/android": "8.1.0",
