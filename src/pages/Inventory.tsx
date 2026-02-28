@@ -166,7 +166,14 @@ const Inventory: React.FC = () => {
   const exportInventory = () => {
     const header = ['ID', 'Name', 'Qty', 'Unit', 'Location', 'Category', 'Par Level', 'Last Updated'];
     const rows = [header, ...items.map(i => [
-      i.id, i.name, i.qty, i.unit, i.location, i.category, i.par, i.lastUpdated
+      String(i.id),
+      String(i.name),
+      String(i.qty),
+      String(i.unit),
+      String(i.location),
+      String(i.category),
+      String(i.par),
+      String(i.lastUpdated)
     ])];
     exportCSV(rows, `Inventory-Master-${new Date().toISOString().split('T')[0]}.csv`);
     setShowAdminSidebar(false);
