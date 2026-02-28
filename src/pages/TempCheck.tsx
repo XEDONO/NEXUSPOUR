@@ -439,7 +439,7 @@ const TempCheck: React.FC = () => {
         }
 
         .tc-page-root .main-scroll-content {
-          padding: 16px 0 120px;
+          padding: 16px 0 180px;
           flex: 1;
           width: 100%;
           display: flex;
