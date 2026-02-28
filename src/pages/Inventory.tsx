@@ -336,7 +336,7 @@ const Inventory: React.FC = () => {
           gap: 12px;
         }
 
-        .inv-page-root .search-bar input { border: none; outline: none; flex: 1; font-weight: 700; color: #2D1B14; }
+        .inv-page-root .search-bar input { border: none; outline: none; flex: 1; font-weight: 700; color: #2D1B14; background: transparent; }
 
         .inv-page-root .section-header {
           display: flex;
@@ -422,15 +422,37 @@ const Inventory: React.FC = () => {
         }
 
         .inv-page-root .sidebar-m3 {
-          position: fixed; top: 0; right: -340px; width: 320px; height: 100%; background: white;
-          z-index: 3000; transition: right 0.5s cubic-bezier(0.4, 0, 0.2, 1); padding: 40px 28px;
-          display: flex; flex-direction: column; box-shadow: -15px 0 50px rgba(0,0,0,0.2); border-radius: 40px 0 0 40px;
+          position: fixed; top: 0; right: -100%; width: 100%; height: 100%; background: white;
+          z-index: 3000; transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1); padding: 24px;
+          display: flex; flex-direction: column; box-shadow: -15px 0 50px rgba(0,0,0,0.2);
+          transform: translateX(100%);
         }
-        .inv-page-root .sidebar-m3.active { right: 0; }
+        .inv-page-root .sidebar-m3.active { transform: translateX(0); }
+        
+        @media (min-width: 768px) {
+          .inv-page-root .sidebar-m3 {
+            width: 340px;
+            border-radius: 40px 0 0 40px;
+          }
+        }
+
         .inv-page-root .scrim-m3 { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(8px); z-index: 2500; opacity: 0; pointer-events: none; transition: opacity 0.5s ease; }
         .inv-page-root .scrim-m3.active { opacity: 1; pointer-events: auto; }
         .inv-page-root .m3-card-wide { padding: 20px; border-radius: 20px; background: #F8F5F2; display: flex; align-items: center; gap: 15px; cursor: pointer; margin-bottom: 12px; transition: 0.2s; }
         .inv-page-root .m3-card-wide:active { background: #E6E1DC; }
+
+        @media (max-width: 768px) {
+          .inv-page-root .main-scroll { padding: 16px 16px 120px; }
+          .inv-page-root .header-espresso { padding: 16px 16px 30px; }
+          .inv-page-root .stats-summary { flex-direction: column; }
+          .inv-page-root .search-bar { margin-bottom: 16px; padding: 8px 14px; }
+          .inv-page-root .filter-tabs { margin-bottom: 16px; }
+          .inv-page-root .stock-item-row { flex-wrap: wrap; }
+          .inv-page-root .qty-box { margin-top: 12px; width: 100%; justify-content: center; }
+          .inv-page-root .fab-add { width: 56px; height: 56px; border-radius: 18px; bottom: 90px; }
+          .inv-page-root .m3-dialog { padding: 24px; }
+          .inv-page-root .m3-dialog .flex { flex-direction: column; }
+        }
       `}</style>
 
       <div className="inv-layout">
@@ -613,22 +635,22 @@ const Inventory: React.FC = () => {
                 <h3 style={{ margin: 0, fontWeight: 900, color: '#2D1B14', fontSize: '1.6rem' }}>Add New Stock</h3>
               </header>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <div className="flex flex-col gap-1">
                 <input className="m3-input-field" placeholder="Item Name (e.g. Arabica Beans)" value={addName} onChange={e => setAddName(e.target.value)} autoFocus />
-                <div style={{ display: 'flex', gap: '12px' }}>
+                <div className="flex flex-col md:flex-row gap-3">
                   <input className="m3-input-field" style={{ flex: 1 }} type="number" placeholder="Initial Qty" value={addQty} onChange={e => setAddQty(e.target.value)} />
                   <select className="m3-input-field" style={{ flex: 1 }} value={addUnit} onChange={e => setAddUnit(e.target.value)}>
                     <option>Units</option><option>Liters</option><option>KG</option><option>Grams</option><option>Cases</option><option>Packs</option>
                   </select>
                 </div>
-                <div style={{ display: 'flex', gap: '12px' }}>
+                <div className="flex flex-col md:flex-row gap-3">
                   <input className="m3-input-field" style={{ flex: 1 }} placeholder="Location (e.g. Fridge 1)" value={addLocation} onChange={e => setAddLocation(e.target.value)} />
                   <input className="m3-input-field" style={{ flex: 1 }} placeholder="Category (e.g. Dairy)" value={addCategory} onChange={e => setAddCategory(e.target.value)} />
                 </div>
                 <input className="m3-input-field" type="number" placeholder="Par Level (Min Stock to trigger alert)" value={addPar} onChange={e => setAddPar(e.target.value)} />
               </div>
 
-              <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
+              <div className="flex flex-col-reverse md:flex-row gap-3 mt-6">
                 <button onClick={() => setShowAdd(false)} style={{ flex: 1, padding: 18, fontWeight: 800, color: '#8D6E63', border: 'none', background: 'none' }}>CANCEL</button>
                 <button onClick={handleAddItem} style={{ flex: 1.5, padding: 18, borderRadius: 20, background: '#2D1B14', color: 'white', fontWeight: 900, boxShadow: '0 8px 20px rgba(45, 27, 20, 0.3)' }}>CREATE ITEM</button>
               </div>
@@ -641,3 +663,4 @@ const Inventory: React.FC = () => {
 };
 
 export default Inventory;
+

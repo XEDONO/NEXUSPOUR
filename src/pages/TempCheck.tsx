@@ -428,8 +428,8 @@ const TempCheck: React.FC = () => {
         }
 
         .tc-page-root .pulse-dot {
-          width: 6px; height: 6px; border-radius: 50%; background: #81C784;
-          box-shadow: 0 0 6px #81C784; animation: m3-pulse-tc 2s infinite;
+          width: 6px; height: 6px; border-radius: 50%; background: var(--m3-success);
+          box-shadow: 0 0 6px var(--m3-success); animation: m3-pulse-tc 2s infinite;
         }
 
         @keyframes m3-pulse-tc {
@@ -439,7 +439,7 @@ const TempCheck: React.FC = () => {
         }
 
         .tc-page-root .main-scroll-content {
-          padding: 20px 20px 120px;
+          padding: 16px 0 120px;
           flex: 1;
           width: 100%;
           display: flex;
@@ -451,12 +451,13 @@ const TempCheck: React.FC = () => {
         .tc-page-root .grid-max-container {
           width: 100%;
           max-width: 1400px;
+          padding: 0 16px;
         }
 
         .tc-page-root .control-panel-m3 {
           background: white;
           border-radius: 20px;
-          padding: 12px 18px;
+          padding: 12px;
           margin-bottom: 16px;
           box-shadow: 0 4px 15px rgba(45, 27, 20, 0.04);
           border: 1px solid #E1E3D3;
@@ -468,7 +469,7 @@ const TempCheck: React.FC = () => {
           align-items: center;
           justify-content: space-between;
           background: #F8F5F2;
-          padding: 8px 16px;
+          padding: 8px;
           border-radius: 14px;
           margin-bottom: 10px;
         }
@@ -515,28 +516,32 @@ const TempCheck: React.FC = () => {
 
         .tc-page-root .table-viewport-m3.sliding { opacity: 0; transform: translateY(10px); }
 
-        .tc-page-root table { width: 100%; border-collapse: collapse; min-width: 1000px; table-layout: fixed; }
+        .tc-page-root table { width: 100%; border-collapse: collapse; min-width: 800px; table-layout: fixed; }
         .tc-page-root th {
-          background: #FDFCF4; padding: 14px 6px; font-size: 0.8rem; font-weight: 900;
+          background: #FDFCF4; padding: 12px 4px; font-size: 0.7rem; font-weight: 900;
           color: #2D1B14; border-bottom: 1px solid #E1E3D3; text-transform: uppercase;
-          letter-spacing: 1px; text-align: center;
-          width: 110px;
+          letter-spacing: 0.5px; text-align: center;
+          width: 90px;
         }
 
         .tc-page-root .sticky-unit-name {
-          width: 230px !important; min-width: 230px; position: sticky; left: 0; background: #FFFFFF;
-          z-index: 10; border-right: 1px solid #E1E3D3; padding-left: 20px; text-align: left;
+          width: 180px !important; min-width: 180px; position: sticky; left: 0; background: #FFFFFF;
+          z-index: 10; border-right: 1px solid #E1E3D3; padding-left: 16px; text-align: left;
+        }
+        
+        .tc-page-root tr:not(:last-child) {
+          border-bottom: 1px solid #F0F0F0;
         }
 
         .tc-page-root .cell-input-m3 {
-          width: 100%; border: none; padding: 18px 4px; text-align: center;
-          font-weight: 900; font-size: 1.1rem; background: transparent;
+          width: 100%; border: none; padding: 16px 4px; text-align: center;
+          font-weight: 900; font-size: 1rem; background: transparent;
           outline: none; transition: all 0.2s;
         }
 
         .tc-page-root .cell-input-m3.pass { background: var(--m3-success-bg); color: var(--m3-success); }
         .tc-page-root .cell-input-m3.fail { background: var(--m3-error-bg); color: var(--m3-error); }
-        .tc-page-root .cell-input-m3:focus { background: #F3F4E9; box-shadow: inset 0 0 0 2px #D6E8B1; }
+        .tc-page-root .cell-input-m3:focus { background: #F3F4E9; box-shadow: inset 0 0 0 2px var(--m3-accent); }
 
         .tc-page-root .m3-footer-nav {
           background: #ffffff;
@@ -589,7 +594,7 @@ const TempCheck: React.FC = () => {
         .tc-page-root .nav-link-m3 ion-icon { font-size: 1.4rem; }
 
         .tc-page-root .fab-save-m3 {
-          position: fixed; bottom: 90px; right: 24px; width: 56px; height: 56px; border-radius: 16px;
+          position: fixed; bottom: 90px; right: 16px; width: 56px; height: 56px; border-radius: 16px;
           background: #2D1B14; color: white; display: flex; align-items: center; justify-content: center;
           box-shadow: 0 8px 20px rgba(45, 27, 20, 0.3); z-index: 1500; border: none;
         }
@@ -597,7 +602,7 @@ const TempCheck: React.FC = () => {
         .tc-page-root .fab-save-m3:active { transform: scale(0.92); }
 
         .tc-page-root .fab-refresh-m3 {
-          position: fixed; bottom: 90px; right: 90px; width: 56px; height: 56px; border-radius: 16px;
+          position: fixed; bottom: 90px; right: 80px; width: 56px; height: 56px; border-radius: 16px;
           background: white; color: #2D1B14; display: flex; align-items: center; justify-content: center;
           box-shadow: 0 8px 20px rgba(45, 27, 20, 0.1); z-index: 1500; border: 1px solid #E1E3D3;
         }
@@ -605,11 +610,12 @@ const TempCheck: React.FC = () => {
         .tc-page-root .fab-refresh-m3:active { transform: scale(0.92); background: #F8F5F2; }
 
         .tc-page-root .sidebar-m3 {
-          position: fixed; top: 0; right: -340px; width: 320px; height: 100%; background: white;
-          z-index: 3000; transition: right 0.5s cubic-bezier(0.4, 0, 0.2, 1); padding: 40px 28px;
-          display: flex; flex-direction: column; box-shadow: -15px 0 50px rgba(0,0,0,0.2); border-radius: 40px 0 0 40px;
+          position: fixed; top: 0; right: -100%; width: 100%; height: 100%; background: white;
+          z-index: 3000; transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1); padding: 24px;
+          display: flex; flex-direction: column; box-shadow: -15px 0 50px rgba(0,0,0,0.2); 
+          transform: translateX(100%);
         }
-        .tc-page-root .sidebar-m3.active { right: 0; }
+        .tc-page-root .sidebar-m3.active { transform: translateX(0); }
         .tc-page-root .scrim-m3 { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(8px); z-index: 2500; opacity: 0; pointer-events: none; transition: opacity 0.5s ease; }
         .tc-page-root .scrim-m3.active { opacity: 1; pointer-events: auto; }
 
@@ -617,7 +623,7 @@ const TempCheck: React.FC = () => {
           display: flex; justify-content: space-between; align-items: center;
           padding: 14px; background: #F8F5F2; border-radius: 14px; margin-bottom: 10px;
         }
-        .tc-page-root .delete-btn-m3 { color: #E57373; font-size: 1.3rem; background: none; border: none; cursor: pointer; }
+        .tc-page-root .delete-btn-m3 { color: var(--m3-error); font-size: 1.3rem; background: none; border: none; cursor: pointer; }
 
         .tc-page-root .modal-blur-overlay {
           position: fixed; inset: 0; background: rgba(0,0,0,0.4); backdrop-filter: blur(5px);
@@ -626,6 +632,13 @@ const TempCheck: React.FC = () => {
         .tc-page-root .m3-dialog-sheet {
           background: white; border-radius: 24px; padding: 24px; width: 100%; max-width: 360px;
           box-shadow: 0 15px 35px rgba(0,0,0,0.25);
+        }
+        
+        @media (min-width: 768px) {
+          .tc-page-root .sidebar-m3 {
+            width: 340px;
+            border-radius: 40px 0 0 40px;
+          }
         }
       `}</style>
 
@@ -832,3 +845,5 @@ const TempCheck: React.FC = () => {
 };
 
 export default TempCheck;
+
+ 

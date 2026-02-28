@@ -351,19 +351,19 @@ const History: React.FC = () => {
         .his-page-root .side-sheet-m3 {
           position: fixed;
           top: 0;
-          right: -340px;
-          width: 320px;
+          right: -100%;
+          width: 100%;
           height: 100%;
           background: white;
           z-index: 3000;
-          transition: right 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-          padding: 40px 28px;
+          transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+          padding: 24px;
           display: flex; flex-direction: column;
           box-shadow: -15px 0 50px rgba(0,0,0,0.2);
-          border-radius: 40px 0 0 40px;
+          transform: translateX(100%);
         }
-        .his-page-root .side-sheet-m3.active { right: 0; }
-
+        .his-page-root .side-sheet-m3.active { transform: translateX(0); }
+        
         .his-page-root .scrim-m3 {
           position: fixed;
           inset: 0;
@@ -387,6 +387,24 @@ const History: React.FC = () => {
           justify-content: center;
           border: 1px solid rgba(255, 255, 255, 0.1);
           transition: all 0.2s;
+        }
+
+        @media (max-width: 768px) {
+          .his-page-root .header-espresso { padding: 16px 16px 30px; }
+          .his-page-root .content-area { padding: 16px; margin-top: -20px; }
+          .his-page-root .week-nav { flex-direction: column; gap: 12px; padding: 16px; }
+          .his-page-root .grid-card { padding: 16px; border-radius: 24px;}
+          .his-page-root .log-item-row { flex-direction: column; align-items: flex-start; gap: 12px; padding: 16px; }
+          .his-page-root table { min-width: 700px; }
+          .his-page-root .sticky-unit { width: 150px !important; min-width: 150px; padding-left: 16px; }
+          .his-page-root th, .his-page-root td { padding: 8px 4px; }
+        }
+
+        @media (min-width: 768px) {
+          .his-page-root .side-sheet-m3 {
+            width: 340px;
+            border-radius: 40px 0 0 40px;
+          }
         }
       `}</style>
 
@@ -576,3 +594,4 @@ const History: React.FC = () => {
 };
 
 export default History;
+

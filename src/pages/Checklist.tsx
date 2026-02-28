@@ -392,6 +392,19 @@ const Checklist: React.FC = () => {
           box-shadow: 0 8px 20px rgba(45, 27, 20, 0.25);
         }
         .cl-page-root .btn-create-m3:active { transform: scale(0.96); box-shadow: 0 4px 10px rgba(45, 27, 20, 0.2); }
+        
+        @media (max-width: 768px) {
+          .cl-page-root .main-scroll { padding: 16px 0 120px; }
+          .cl-page-root .grid-max { padding: 0 16px; }
+          .cl-page-root .espresso-header { padding: 16px 16px 30px; }
+          .cl-page-root .freq-header { flex-direction: column; align-items: flex-start; gap: 12px; padding: 16px; }
+          .cl-page-root .table-viewport { padding: 0 16px 16px; }
+          .cl-page-root .sticky-col { width: 180px !important; min-width: 180px; font-size: 0.8rem; }
+          .cl-page-root .task-main-text { font-size: 0.9rem; }
+          .cl-page-root .m3-dialog { padding: 24px; }
+          .cl-page-root .sidebar-m3 { width: 100%; border-radius: 0; right: -100%; }
+          .cl-page-root .sidebar-m3.active { right: 0; }
+        }
       `}</style>
 
       <IonContent scrollY={false}>

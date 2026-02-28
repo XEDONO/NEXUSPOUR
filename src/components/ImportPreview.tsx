@@ -39,9 +39,9 @@ const ImportPreview: React.FC<Props> = ({ open, items, type, sections, onCancel,
             <div key={idx} className="flex items-center gap-3 p-2 rounded-md border border-[rgba(15,23,36,0.04)]">
               <input type="checkbox" checked={!!it._keep} onChange={(e) => setLocal(prev => { const copy = [...prev]; copy[idx]._keep = e.target.checked; return copy; })} />
               {type === 'stock' ? (
-                <div className="flex-1 grid grid-cols-3 gap-2 items-center">
-                  <input className="col-span-2 p-2 rounded-md" value={it.name} onChange={(e) => setLocal(prev => { const copy = [...prev]; copy[idx].name = e.target.value; return copy; })} />
-                  <input className="p-2 rounded-md w-24" value={String(it.qty)} onChange={(e) => setLocal(prev => { const copy = [...prev]; copy[idx].qty = Number(e.target.value || 0); return copy; })} />
+                <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-2 items-center">
+                  <input className="col-span-1 md:col-span-2 p-2 rounded-md" value={it.name} onChange={(e) => setLocal(prev => { const copy = [...prev]; copy[idx].name = e.target.value; return copy; })} />
+                  <input className="p-2 rounded-md w-full md:w-24" value={String(it.qty)} onChange={(e) => setLocal(prev => { const copy = [...prev]; copy[idx].qty = Number(e.target.value || 0); return copy; })} />
                   {sections && (
                     <select value={it.section || ''} onChange={(e) => setLocal(prev => { const copy = [...prev]; copy[idx].section = e.target.value; return copy; })} className="p-2 rounded-md">
                       <option value="">Assign section</option>

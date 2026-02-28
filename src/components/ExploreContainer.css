@@ -1,9 +1,14 @@
 /* ExploreContainer light styles to match new theme */
 #container { width: 100%; }
 
-#container strong { font-size: 16px; color: var(--coffee-900); }
-#container .muted { color: var(--muted); font-size: 14px; margin-top: 4px }
+#container strong { font-size: 14px; color: var(--coffee-900); }
+#container .muted { color: var(--muted); font-size: 12px; margin-top: 4px }
 
 .hero-cta { margin-top: 12px; display:flex; gap:8px; align-items:center }
 .hero-cta .btn { padding: .55rem .85rem; border-radius: .75rem; font-weight:600 }
 .hero-illustration { width:48px; height:48px; border-radius:12px; display:flex; align-items:center; justify-content:center; background: linear-gradient(180deg, rgba(98,192,106,0.12), rgba(255,204,178,0.04)); }
+
+@media (min-width: 768px) {
+  #container strong { font-size: 16px; }
+  #container .muted { font-size: 14px; }
+}

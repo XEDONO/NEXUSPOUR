@@ -245,6 +245,10 @@ const Dashboard: React.FC = () => {
           transition: all 0.2s;
           position: relative;
         }
+        
+        .icon-btn-m3 ion-icon {
+          font-size: 1.6rem;
+        }
 
         .icon-btn-m3:active { transform: scale(0.9); background: rgba(255,255,255,0.2); }
 
@@ -256,6 +260,14 @@ const Dashboard: React.FC = () => {
           transform: translateY(15px);
           transition: all 0.8s ease-out;
           width: 100%;
+        }
+        
+        .hero-greet h2 {
+          font-size: 2.4rem;
+          font-weight: 800;
+          margin: 0;
+          color: white;
+          text-shadow: 0 2px 10px rgba(0,0,0,0.2);
         }
 
         .hero-greet.visible { opacity: 1; transform: translateY(0); }
@@ -381,13 +393,71 @@ const Dashboard: React.FC = () => {
         .nav-link-m3 ion-icon { font-size: 1.6rem; }
 
         .side-sheet {
-          position: fixed; top: 0; right: -340px; width: 320px; height: 100%; background: white;
+          position: fixed; top: 0; right: -100%; width: 320px; height: 100%; background: white;
           z-index: 3000; transition: right 0.5s cubic-bezier(0.4, 0, 0.2, 1); padding: 40px 28px;
           display: flex; flex-direction: column; box-shadow: -15px 0 50px rgba(0,0,0,0.2); border-radius: 40px 0 0 40px;
         }
         .side-sheet.active { right: 0; }
         .scrim { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(8px); z-index: 2500; opacity: 0; pointer-events: none; transition: opacity 0.5s ease; }
         .scrim.active { opacity: 1; pointer-events: auto; }
+
+        /* Mobile Responsive Styles */
+        @media (max-width: 768px) {
+          .espresso-header {
+            padding: 40px 16px 60px;
+          }
+          .logo-text {
+            font-size: 1.5rem;
+          }
+          .logo-icon-box {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+          }
+          .header-actions {
+            gap: 8px;
+          }
+          .icon-btn-m3 {
+            width: 40px;
+            height: 40px;
+          }
+          .icon-btn-m3 ion-icon {
+            font-size: 1.3rem;
+          }
+          .hero-greet h2 {
+            font-size: 1.8rem;
+          }
+          .hero-greet {
+            margin-top: 24px;
+          }
+          .status-pill-m3 {
+            padding: 8px 16px;
+            font-size: 0.75rem;
+            margin-top: 16px;
+          }
+          .m3-card-wide {
+            padding: 16px;
+            gap: 16px;
+            border-radius: 24px;
+          }
+          .card-icon-m3 {
+            width: 48px;
+            height: 48px;
+            font-size: 1.8rem;
+            border-radius: 16px;
+          }
+          .card-title-m3 {
+            font-size: 1.1rem;
+          }
+          .card-desc-m3 {
+            font-size: 0.85rem;
+          }
+          .side-sheet {
+            width: 100%;
+            right: -100%;
+            border-radius: 0;
+          }
+        }
       `}</style>
 
       <IonContent scrollY={false}>
@@ -402,11 +472,11 @@ const Dashboard: React.FC = () => {
               </div>
               <div className="header-actions">
                 <button className="icon-btn-m3" onClick={() => setShowNotifications(true)} aria-label="Notifications">
-                  <IonIcon icon={notificationsOutline} style={{ fontSize: '1.6rem' }} />
-                  <IonBadge color="danger" style={{ position: 'absolute', top: '2px', right: '2px', scale: '0.7' }}>3</IonBadge>
+                  <IonIcon icon={notificationsOutline} />
+                  <IonBadge color="danger" style={{ position: 'absolute', top: '2px', right: '2px', transform: 'scale(0.7)' }}>3</IonBadge>
                 </button>
                 <button className="icon-btn-m3" onClick={() => setShowAdminSidebar(true)} aria-label="Settings">
-                  <IonIcon icon={settingsOutline} style={{ fontSize: '1.6rem' }} />
+                  <IonIcon icon={settingsOutline} />
                 </button>
                 <IonAvatar style={{ width: '46px', height: '46px', border: '3px solid rgba(255,255,255,0.2)', marginLeft: '4px', boxShadow: '0 4px 10px rgba(0,0,0,0.2)' }}>
                   <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Coffee" alt="Avatar" />
@@ -415,7 +485,7 @@ const Dashboard: React.FC = () => {
             </div>
 
             <div className={`hero-greet ${isLoaded ? 'visible' : ''}`}>
-              <h2 style={{ fontSize: '2.4rem', fontWeight: 800, margin: 0, color: 'white', textShadow: '0 2px 10px rgba(0,0,0,0.2)' }}>Welcome, Xedono</h2>
+              <h2>Welcome, Xedono</h2>
               <div className="status-pill-m3">
                 <div className="pulse-dot"></div>
                 SYSTEM OPERATIONAL
@@ -574,3 +644,4 @@ const Dashboard: React.FC = () => {
 };
 
 export default Dashboard;
+

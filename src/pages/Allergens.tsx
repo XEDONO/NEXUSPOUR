@@ -245,6 +245,7 @@ const Allergens: React.FC = () => {
           font-weight: 700;
           color: #2D1B14;
           font-size: 1rem;
+          background: transparent;
         }
 
         .alg-page-root .table-viewport {
@@ -290,11 +291,14 @@ const Allergens: React.FC = () => {
           color: #2D1B14;
           font-size: 0.95rem;
         }
+        
+        .alg-page-root tr:not(:last-child) {
+          border-bottom: 1px solid #FDFCF4;
+        }
 
         .alg-page-root td {
           padding: 12px 8px;
           text-align: center;
-          border-bottom: 1px solid #FDFCF4;
         }
 
         .alg-page-root .allergen-check {
@@ -410,11 +414,13 @@ const Allergens: React.FC = () => {
         }
 
         .alg-page-root .sidebar-m3 {
-          position: fixed; top: 0; right: -340px; width: 320px; height: 100%; background: white;
-          z-index: 3000; transition: right 0.5s cubic-bezier(0.4, 0, 0.2, 1); padding: 40px 28px;
-          display: flex; flex-direction: column; box-shadow: -15px 0 50px rgba(0,0,0,0.2); border-radius: 40px 0 0 40px;
+          position: fixed; top: 0; right: -100%; width: 100%; height: 100%; background: white;
+          z-index: 3000; transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1); padding: 24px;
+          display: flex; flex-direction: column; box-shadow: -15px 0 50px rgba(0,0,0,0.2);
+          transform: translateX(100%);
         }
-        .alg-page-root .sidebar-m3.active { right: 0; }
+        .alg-page-root .sidebar-m3.active { transform: translateX(0); }
+        
         .alg-page-root .scrim-m3 {
           position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6);
           backdrop-filter: blur(8px); z-index: 2500; opacity: 0; pointer-events: none;
@@ -427,6 +433,25 @@ const Allergens: React.FC = () => {
           transition: background 0.2s; margin-bottom: 12px;
         }
         .alg-page-root .m3-card-wide:active { background: #E6E1DC; }
+
+        @media (max-width: 768px) {
+          .alg-page-root .header-espresso { padding: 16px 16px 30px; }
+          .alg-page-root .main-scroll { padding: 16px 16px 120px; }
+          .alg-page-root .table-viewport { border-radius: 16px; }
+          .alg-page-root table { min-width: 1000px; }
+          .alg-page-root th { font-size: 0.55rem; padding: 12px 4px; }
+          .alg-page-root .sticky-dish-name { width: 180px !important; min-width: 180px; font-size: 0.85rem; padding-left: 16px; }
+          .alg-page-root .allergen-grid-select { grid-template-columns: 1fr; }
+          .alg-page-root .m3-dialog { padding: 24px; }
+          .alg-page-root .fab-add { bottom: 90px; }
+        }
+
+        @media (min-width: 768px) {
+          .alg-page-root .sidebar-m3 {
+            width: 340px;
+            border-radius: 40px 0 0 40px;
+          }
+        }
       `}</style>
 
       <div className="alg-main-container">

@@ -28,9 +28,9 @@ const Home: React.FC = () => {
               <div>
                 <strong className="block text-lg">Ready to run your cafe today?</strong>
                 <p className="muted">Check temperature logs, audits, and daily prep with one tap.</p>
-                <div className="hero-cta">
+                <div className="hero-cta flex flex-col sm:flex-row items-start sm:items-center gap-2 mt-4">
                   <button className="btn btn-primary">Start Check</button>
-                  <button className="btn" style={{ background: 'transparent', color: 'var(--coffee-700)' }}>View History</button>
+                  <button className="btn bg-transparent text-coffee-700">View History</button>
                 </div>
               </div>
             </div>
