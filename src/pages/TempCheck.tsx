@@ -103,13 +103,13 @@ const TempCheck: React.FC = () => {
 
   const [showAddFridgeModal, setShowAddFridgeModal] = useState(false);
   const [showManageUnitsModal, setShowManageUnitsModal] = useState(false);
-  const [showAdminSidebar, setShowAdminSidebar] = useState(false);
   const [newFridgeName, setNewFridgeName] = useState('');
   const [newFridgeMinTemp, setNewFridgeMinTemp] = useState('2');
   const [newFridgeMaxTemp, setNewFridgeMaxTemp] = useState('5');
   const [isLoaded, setIsLoaded] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null);
+  const [showFabMenu, setShowFabMenu] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => setIsLoaded(true), 150);
@@ -609,6 +609,29 @@ const TempCheck: React.FC = () => {
 
         .tc-page-root .fab-refresh-m3:active { transform: scale(0.92); background: #F8F5F2; }
 
+        .tc-page-root .fab-menu-container {
+          position: fixed;
+          bottom: 90px;
+          right: 16px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 12px;
+          z-index: 1600;
+        }
+
+        .tc-page-root .fab-main-m3 {
+          width: 56px; height: 56px; border-radius: 16px;
+          background: var(--m3-primary); color: white; display: flex; align-items: center; justify-content: center;
+          box-shadow: 0 8px 20px rgba(45, 27, 20, 0.3); border: none;
+        }
+
+        .tc-page-root .fab-action-m3 {
+          width: 48px; height: 48px; border-radius: 12px;
+          background: white; color: var(--m3-primary); display: flex; align-items: center; justify-content: center;
+          box-shadow: 0 4px 15px rgba(45, 27, 20, 0.2); border: 1px solid #E1E3D3;
+        }
+
         .tc-page-root .sidebar-m3 {
           position: fixed; top: 0; right: -100%; width: 100%; height: 100%; background: white;
           z-index: 3000; transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1); padding: 24px;
@@ -624,6 +647,21 @@ const TempCheck: React.FC = () => {
           padding: 14px; background: #F8F5F2; border-radius: 14px; margin-bottom: 10px;
         }
         .tc-page-root .delete-btn-m3 { color: var(--m3-error); font-size: 1.3rem; background: none; border: none; cursor: pointer; }
+
+        .tc-page-root .m3-input {
+          width: 100%;
+          padding: 16px;
+          border-radius: 12px;
+          background: #F8F5F2;
+          border: 1px solid #E1E3D3;
+          margin-bottom: 16px;
+          font-weight: 700;
+          color: #2D1B14;
+          text-align: center;
+        }
+        .tc-page-root .m3-input::placeholder {
+          color: #A1887F;
+        }
 
         .tc-page-root .modal-blur-overlay {
           position: fixed; inset: 0; background: rgba(0,0,0,0.4); backdrop-filter: blur(5px);
@@ -653,9 +691,6 @@ const TempCheck: React.FC = () => {
                 <h1 className="logo-text-m3">NexusPour</h1>
               </div>
               <div className="action-row-m3">
-                <button className="round-btn-m3" onClick={() => setShowAdminSidebar(true)} aria-label="Settings">
-                  <IonIcon icon={settingsOutline} style={{ fontSize: '1.2rem' }} />
-                </button>
                 <IonAvatar style={{ width: '36px', height: '36px', border: '2px solid rgba(255,255,255,0.2)', marginLeft: '4px', boxShadow: '0 4px 10px rgba(0,0,0,0.2)' }}>
                   <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Coffee" alt="User" />
                 </IonAvatar>
@@ -740,17 +775,28 @@ const TempCheck: React.FC = () => {
           </main>
         </div>
 
-        <button className="fab-refresh-m3 ion-activatable relative" onClick={() => window.location.reload()} aria-label="Refresh Page">
-          <IonIcon icon={refreshOutline} style={{ fontSize: '1.8rem' }} />
-          <IonRippleEffect />
-        </button>
 
-        <button className="fab-save-m3 ion-activatable relative" onClick={saveAndReserve} aria-label="Save and Export">
-          <IonIcon icon={saveOutline} style={{ fontSize: '2rem' }} />
-          <IonRippleEffect />
-        </button>
+        <div className="fab-menu-container">
+          {showFabMenu && (
+            <>
+              <button className="fab-action-m3 ion-activatable relative" onClick={() => {setShowAddFridgeModal(true); setShowFabMenu(false);}} aria-label="Add Unit">
+                <IonIcon icon={addOutline} style={{ fontSize: '1.8rem' }} />
+              </button>
+              <button className="fab-action-m3 ion-activatable relative" onClick={() => {setShowManageUnitsModal(true); setShowFabMenu(false);}} aria-label="Manage Units">
+                <IonIcon icon={constructOutline} style={{ fontSize: '1.8rem' }} />
+              </button>
+              <button className="fab-action-m3 ion-activatable relative" onClick={saveAndReserve} aria-label="Save and Export">
+                <IonIcon icon={saveOutline} style={{ fontSize: '1.8rem' }} />
+              </button>
+            </>
+          )}
+          <button className="fab-main-m3 ion-activatable relative" onClick={() => setShowFabMenu(!showFabMenu)} aria-label="Menu">
+            <IonIcon icon={showFabMenu ? closeOutline : settingsOutline} style={{ fontSize: '2rem' }} />
+            <IonRippleEffect />
+          </button>
+        </div>
       </IonContent>
-
+      
       <nav className="m3-footer-nav">
         <div className="nav-link-m3" onClick={() => history.push('/dashboard')}>
           <div className="nav-pill-m3"><IonIcon icon={home} /></div>
@@ -774,44 +820,17 @@ const TempCheck: React.FC = () => {
         </div>
       </nav>
 
-      <div className={`scrim-m3 ${showAdminSidebar ? 'active' : ''}`} onClick={() => setShowAdminSidebar(false)} />
-      <aside className={`sidebar-m3 ${showAdminSidebar ? 'active' : ''}`}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px' }}>
-          <h2 style={{ fontWeight: 900, margin: 0, fontSize: '1.8rem', color: '#2D1B14' }}>Settings</h2>
-          <button className="round-btn-m3" style={{ background: '#F8F5F2', color: '#2D1B14', border: 'none' }} onClick={() => setShowAdminSidebar(false)}>
-            <IonIcon icon={closeOutline} style={{ fontSize: '2rem' }} />
-          </button>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-          <div className="m3-card-wide" style={{ padding: '20px', borderRadius: '20px', opacity: 1, transform: 'none', margin: 0, boxShadow: 'none', background: '#F8F5F2', display: 'flex', alignItems: 'center', gap: '15px' }} onClick={() => { history.push('/history'); setShowAdminSidebar(false); }}>
-            <IonIcon icon={timeOutline} style={{ fontSize: '1.8rem', color: '#2D1B14' }} />
-            <span style={{ fontWeight: 800, color: '#2D1B14' }}>Historical Logs</span>
-          </div>
-          <div className="m3-card-wide" style={{ padding: '20px', borderRadius: '20px', opacity: 1, transform: 'none', margin: 0, boxShadow: 'none', background: '#F8F5F2', display: 'flex', alignItems: 'center', gap: '15px' }} onClick={() => { setShowAdminSidebar(false); setShowManageUnitsModal(true); }}>
-            <IonIcon icon={constructOutline} style={{ fontSize: '1.8rem', color: '#2D1B14' }} />
-            <span style={{ fontWeight: 800, color: '#2D1B14' }}>Manage Units</span>
-          </div>
-          <div className="m3-card-wide" style={{ padding: '20px', borderRadius: '20px', opacity: 1, transform: 'none', margin: 0, boxShadow: 'none', background: '#F8F5F2', display: 'flex', alignItems: 'center', gap: '15px' }} onClick={() => { setShowAdminSidebar(false); setShowAddFridgeModal(true); }}>
-            <IonIcon icon={addOutline} style={{ fontSize: '1.8rem', color: '#2D1B14' }} />
-            <span style={{ fontWeight: 800, color: '#2D1B14' }}>Add New Unit</span>
-          </div>
-        </div>
-      </aside>
-
       {showAddFridgeModal && (
         <div className="modal-blur-overlay" onClick={() => setShowAddFridgeModal(false)}>
           <div className="m3-dialog-sheet" onClick={e => e.stopPropagation()}>
-            <h2 style={{ fontWeight: 900, margin: '0 0 24px', fontSize: '1.8rem', textAlign: 'center', color: '#000000' }}>Setup Unit</h2>
-            <input placeholder="Equipment Name" value={newFridgeName} onChange={e => setNewFridgeName(e.target.value)}
-                   style={{ width: '100%', padding: '16px', borderRadius: '16px', background: '#000000', border: 'none', marginBottom: '16px', fontWeight: 700 }} />
+            <h2 style={{ fontWeight: 900, margin: '0 0 24px', fontSize: '1.8rem', textAlign: 'center', color: '#2D1B14' }}>Add New Unit</h2>
+            <input placeholder="Equipment Name" value={newFridgeName} onChange={e => setNewFridgeName(e.target.value)} className="m3-input" />
             <div style={{ display: 'flex', gap: '16px' }}>
-              <input type="number" value={newFridgeMinTemp} onChange={e => setNewFridgeMinTemp(e.target.value)}
-                     style={{ width: '100%', padding: '12px', borderRadius: '16px', background: '#000000', border: 'none', textAlign: 'center', fontWeight: 700 }} placeholder="Min" />
-              <input type="number" value={newFridgeMaxTemp} onChange={e => setNewFridgeMaxTemp(e.target.value)}
-                     style={{ width: '100%', padding: '12px', borderRadius: '16px', background: '#000000', border: 'none', textAlign: 'center', fontWeight: 700 }} placeholder="Max" />
+              <input type="number" value={newFridgeMinTemp} onChange={e => setNewFridgeMinTemp(e.target.value)} className="m3-input" placeholder="Min Temp" />
+              <input type="number" value={newFridgeMaxTemp} onChange={e => setNewFridgeMaxTemp(e.target.value)} className="m3-input" placeholder="Max Temp" />
             </div>
             <div style={{ display: 'flex', gap: 12, marginTop: 32 }}>
-              <button style={{ flex: 1, height: '52px', borderRadius: '14px', border: 'none', fontWeight: 800, background: '#FF0000' }} onClick={() => setShowAddFridgeModal(false)}>CANCEL</button>
+              <button style={{ flex: 1, height: '52px', borderRadius: '14px', border: 'none', fontWeight: 800, background: '#F8F5F2', color: '#2D1B14' }} onClick={() => setShowAddFridgeModal(false)}>CANCEL</button>
               <button style={{ flex: 1, height: '52px', borderRadius: '14px', border: 'none', fontWeight: 800, background: '#2D1B14', color: 'white' }} onClick={addFridge}>CREATE</button>
             </div>
           </div>
