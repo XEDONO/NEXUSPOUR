@@ -55,8 +55,6 @@ const ALLERGENS = [
   { key: 'sulphites', label: 'Sulphites' }
 ];
 
-const STORAGE_KEY = 'cafeops_dishes_v1';
-
 const Allergens: React.FC = () => {
   const history = useHistory();
   const [isLoaded, setIsLoaded] = useState(false);
@@ -66,21 +64,16 @@ const Allergens: React.FC = () => {
   const [newDishName, setNewDishName] = useState('');
   const [selectedAllergens, setSelectedAllergens] = useState<string[]>([]);
 
-  const [dishes, setDishes] = useState<Dish[]>(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      return stored ? JSON.parse(stored) : [];
-    } catch { return []; }
-  });
+  const [dishes, setDishes] = useState<Dish[]>([]);
 
   useEffect(() => {
     const timer = setTimeout(() => setIsLoaded(true), 150);
+    fetch('http://localhost:3001/api/allergens')
+      .then(res => res.json())
+      .then(data => setDishes(data.map((d: any) => ({ ...d, allergens: JSON.parse(d.allergens) }))))
+      .catch(console.error);
     return () => clearTimeout(timer);
   }, []);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(dishes));
-  }, [dishes]);
 
   const filteredDishes = useMemo(() => {
     return dishes.filter(d => d.name.toLowerCase().includes(searchQuery.toLowerCase()));
@@ -94,20 +87,35 @@ const Allergens: React.FC = () => {
 
   const addDish = () => {
     if (!newDishName.trim()) return;
-    const newDish: Dish = {
-      id: Date.now().toString(),
-      name: newDishName.trim(),
-      allergens: selectedAllergens
+    const newDish = {
+      dish: newDishName.trim(),
+      allergens: JSON.stringify(selectedAllergens)
     };
-    setDishes([newDish, ...dishes]);
-    setNewDishName('');
-    setSelectedAllergens([]);
-    setShowAddDish(false);
+    
+    fetch('http://localhost:3001/api/allergens', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newDish)
+    })
+    .then(res => res.json())
+    .then(addedDish => {
+      setDishes(prev => [{ ...addedDish, allergens: JSON.parse(addedDish.allergens) }, ...prev]);
+      setNewDishName('');
+      setSelectedAllergens([]);
+      setShowAddDish(false);
+    })
+    .catch(console.error);
   };
 
   const deleteDish = (id: string) => {
     if (window.confirm('Remove this dish from the allergen matrix?')) {
-      setDishes(dishes.filter(d => d.id !== id));
+      fetch(`http://localhost:3001/api/allergens/${id}`, { method: 'DELETE' })
+      .then(res => {
+        if (res.ok) {
+          setDishes(dishes.filter(d => d.id !== id));
+        }
+      })
+      .catch(console.error);
     }
   };
 

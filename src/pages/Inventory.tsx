@@ -52,8 +52,6 @@ type StockItem = {
   lastUpdated: string;
 };
 
-const STORAGE_KEY = 'cafeops_stock_master_v3';
-
 const Inventory: React.FC = () => {
   const history = useHistory();
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -72,21 +70,16 @@ const Inventory: React.FC = () => {
   const [addCategory, setAddCategory] = useState('General');
   const [addPar, setAddPar] = useState('0');
 
-  const [items, setItems] = useState<StockItem[]>(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      return stored ? JSON.parse(stored) : [];
-    } catch { return []; }
-  });
+  const [items, setItems] = useState<StockItem[]>([]);
 
   useEffect(() => {
     const timer = setTimeout(() => setIsLoaded(true), 150);
+    fetch('http://localhost:3001/api/inventory')
+        .then(res => res.json())
+        .then(setItems)
+        .catch(console.error);
     return () => clearTimeout(timer);
   }, []);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-  }, [items]);
 
   const filteredItems = useMemo(() => {
     return items.filter(i => {
@@ -121,8 +114,7 @@ const Inventory: React.FC = () => {
 
   const handleAddItem = () => {
     if (!addName.trim()) return;
-    const newItem: StockItem = {
-      id: Date.now().toString(),
+    const newItem = {
       name: addName.trim(),
       qty: parseFloat(addQty) || 0,
       unit: addUnit,
@@ -131,9 +123,19 @@ const Inventory: React.FC = () => {
       par: parseFloat(addPar) || 0,
       lastUpdated: new Date().toISOString()
     };
-    setItems([newItem, ...items]);
-    setShowAdd(false);
-    resetAddForm();
+    
+    fetch('http://localhost:3001/api/inventory', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newItem)
+    })
+    .then(res => res.json())
+    .then(addedItem => {
+        setItems(prev => [addedItem, ...prev]);
+        setShowAdd(false);
+        resetAddForm();
+    })
+    .catch(console.error);
   };
 
   const resetAddForm = () => {
@@ -146,14 +148,31 @@ const Inventory: React.FC = () => {
   };
 
   const adjustQty = (id: string, delta: number) => {
+    const item = items.find(i => i.id === id);
+    if (!item) return;
+
+    const newQty = Math.max(0, item.qty + delta);
+    
     setItems(prev => prev.map(i =>
-      i.id === id ? { ...i, qty: Math.max(0, i.qty + delta), lastUpdated: new Date().toISOString() } : i
+      i.id === id ? { ...i, qty: newQty, lastUpdated: new Date().toISOString() } : i
     ));
+
+    fetch(`http://localhost:3001/api/inventory/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stock: newQty })
+    }).catch(console.error);
   };
 
   const deleteItem = (id: string) => {
     if (window.confirm('Permanently remove this item?')) {
-      setItems(prev => prev.filter(i => i.id !== id));
+        fetch(`http://localhost:3001/api/inventory/${id}`, { method: 'DELETE' })
+        .then(res => {
+            if(res.ok) {
+                setItems(prev => prev.filter(i => i.id !== id));
+            }
+        })
+        .catch(console.error);
     }
   };
 
@@ -182,15 +201,20 @@ const Inventory: React.FC = () => {
   const saveAuditLog = () => {
     const log = {
       date: new Date().toLocaleDateString(),
-      total: items.length,
-      lowStock: stats.low,
-      outOfStock: stats.out,
-      timestamp: new Date().toISOString(),
-      type: 'Full Stock Audit'
+      log_data: JSON.stringify({
+        total: items.length,
+        lowStock: stats.low,
+        outOfStock: stats.out,
+      }),
     };
-    const existing = JSON.parse(localStorage.getItem('inventory_logs_v1') || '[]');
-    localStorage.setItem('inventory_logs_v1', JSON.stringify([log, ...existing]));
-    alert('Current stock levels archived to History.');
+
+    fetch('http://localhost:3001/api/inventory-logs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(log)
+    })
+    .then(() => alert('Current stock levels archived to History.'))
+    .catch(console.error);
   };
 
   return (

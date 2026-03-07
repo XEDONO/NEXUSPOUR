@@ -4,12 +4,11 @@ import {
   IonPage,
   IonIcon,
   IonAvatar,
-  IonBadge,
   IonRippleEffect,
-  IonGrid,
-  IonRow,
-  IonCol,
-  IonButton
+  IonButton,
+  IonAlert,
+  IonToast,
+  IonProgressBar
 } from '@ionic/react';
 import {
   chevronBackOutline,
@@ -22,15 +21,21 @@ import {
   thermometerOutline,
   clipboardOutline,
   albumsOutline,
-  timeOutline,
-  calendarOutline,
-  checkmarkCircleOutline,
-  alertCircleOutline,
   chevronBack,
   chevronForward,
-  archiveOutline
+  archiveOutline,
+  warningOutline,
+  refreshOutline,
+  layersOutline,
+  sparklesOutline,
+  checkmarkDoneOutline
 } from 'ionicons/icons';
 import { useHistory } from 'react-router-dom';
+import ChecklistHistoryTable, { TaskRequirement } from '../components/ChecklistHistoryTable';
+
+const API_BASE = 'http://localhost:3001/api';
+
+type FridgeTemplate = { id: string; location: string; expectedMin: number; expectedMax: number };
 
 type TemperatureReading = {
   id: string;
@@ -49,43 +54,140 @@ type DailyLog = {
 
 const History: React.FC = () => {
   const [logs, setLogs] = useState<DailyLog[]>([]);
-  const [checklistLogs, setChecklistLogs] = useState<any[]>([]);
+  const [checklistRequirements, setChecklistRequirements] = useState<TaskRequirement[]>([]);
   const [inventoryLogs, setInventoryLogs] = useState<any[]>([]);
   const [logType, setLogType] = useState<'temperature' | 'checklist' | 'inventory'>('temperature');
+  const [checklistFrequency, setChecklistFrequency] = useState<'daily' | 'weekly' | 'monthly'>('daily');
   const [showNotifications, setShowNotifications] = useState(false);
   const [showAdminSidebar, setShowAdminSidebar] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
-
-  const [currentWeekStart, setCurrentWeekStart] = useState(() => {
-    const d = new Date();
-    const day = d.getDay();
-    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-    const monday = new Date(d.setDate(diff));
-    monday.setHours(0,0,0,0);
-    return monday;
-  });
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [deleteAlertInfo, setDeleteAlertInfo] = useState<{ isOpen: boolean, date: string }>({ isOpen: false, date: '' });
+  const [showToast, setShowToast] = useState({ show: false, message: '', color: 'success' });
+  const [currentDate, setCurrentDate] = useState(new Date());
 
   const history = useHistory();
 
   useEffect(() => {
-    const timer = setTimeout(() => setIsLoaded(true), 150);
     loadAllLogs();
-    return () => clearTimeout(timer);
   }, []);
 
-  const loadAllLogs = () => {
-    const existingTemps = JSON.parse(localStorage.getItem('temp_logs_v2') || '[]');
-    setLogs(existingTemps);
-
-    try { setChecklistLogs(JSON.parse(localStorage.getItem('checklist_logs_v1') || '[]')); } catch {}
-    try { setInventoryLogs(JSON.parse(localStorage.getItem('inventory_logs_v1') || '[]')); } catch {}
+  const fetchSafe = async (endpoint: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/${endpoint}`, { cache: 'no-store' });
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      return await res.json();
+    } catch (e) {
+      console.warn(`Silently handled error fetching ${endpoint}:`, e);
+      return [];
+    }
   };
 
-  const weekDays = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(currentWeekStart);
-    d.setDate(currentWeekStart.getDate() + i);
-    return d.toISOString().split('T')[0];
-  });
+  const loadAllLogs = async () => {
+    setIsRefreshing(true);
+    try {
+      const [fridgesData, logsData, checklistData, inventoryData] = await Promise.all([
+        fetchSafe('fridges'),
+        fetchSafe('logs'),
+        fetchSafe('checklists'),
+        fetchSafe('inventory-logs')
+      ]);
+
+      const dailyLogs = (logsData || []).reduce((acc: DailyLog[], log: any) => {
+        let dayLog = acc.find(l => l.date === log.date);
+        if (!dayLog) {
+            dayLog = { date: log.date, readings: [] };
+            acc.push(dayLog);
+        }
+        const fridge = (fridgesData || []).find((f: FridgeTemplate) => f.id === log.fridge_id);
+        if (fridge) {
+            dayLog.readings.push({
+                id: fridge.id,
+                location: fridge.location,
+                expectedMin: fridge.expectedMin,
+                expectedMax: fridge.expectedMax,
+                reading: log.reading,
+                timestamp: log.date,
+                pass: !!log.pass
+            });
+        }
+        return acc;
+      }, []);
+
+      setLogs(dailyLogs);
+      setChecklistRequirements(checklistData || []);
+      setInventoryLogs(inventoryData || []);
+      setIsLoaded(true);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  const deleteDayLogs = async (date: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/logs/day/${date}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const result = await res.json();
+      if (res.ok) {
+        setShowToast({ show: true, message: result.message || `Deleted logs for ${date}`, color: 'success' });
+        loadAllLogs();
+      } else {
+        throw new Error(result.message || 'Delete failed');
+      }
+    } catch (error: any) {
+      setShowToast({ show: true, message: `Error: ${error.message}`, color: 'danger' });
+    }
+  };
+
+  const getWeek = (date: Date) => {
+    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    const dayNum = d.getUTCDay() || 7;
+    d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1));
+    return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1)/7);
+  };
+
+  const changePeriod = (dir: number) => {
+    const d = new Date(currentDate);
+    const period = logType === 'temperature' ? 'week' : checklistFrequency;
+    if (period === 'daily' || period === 'week') {
+      d.setDate(d.getDate() + (dir * 7));
+    } else if (period === 'weekly') {
+      d.setDate(d.getDate() + (dir * 7));
+    } else { // monthly
+      d.setMonth(d.getMonth() + dir);
+    }
+    setCurrentDate(d);
+  };
+
+  const dateColumns = (() => {
+    const period = logType === 'temperature' ? 'week' : checklistFrequency;
+    const d = new Date(currentDate);
+    if (period === 'daily' || period === 'week') {
+      const day = d.getDay();
+      const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+      const monday = new Date(d.setDate(diff));
+      return Array.from({ length: 7 }, (_, i) => {
+        const tempDate = new Date(monday);
+        tempDate.setDate(monday.getDate() + i);
+        return tempDate.toISOString().split('T')[0];
+      });
+    } else if (period === 'weekly') {
+      return Array.from({ length: 4 }, (_, i) => {
+        const week = getWeek(d) - i;
+        return `${d.getFullYear()}-W${week}`;
+      }).reverse();
+    } else { // monthly
+      return Array.from({ length: 6 }, (_, i) => {
+        const month = d.getMonth() - i;
+        const year = d.getFullYear();
+        const date = new Date(year, month, 1);
+        return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`;
+      }).reverse();
+    }
+  })();
 
   const allLocations = Array.from(new Set(logs.flatMap(l => l.readings.map(r => r.location))));
 
@@ -94,44 +196,27 @@ const History: React.FC = () => {
     return dayLog?.readings.find(r => r.location === location);
   };
 
-  const changeWeek = (dir: number) => {
-    const d = new Date(currentWeekStart);
-    d.setDate(d.getDate() + (dir * 7));
-    setCurrentWeekStart(d);
-  };
-
-  const deleteTempLogsForDate = (date: string) => {
-    if (window.confirm(`Delete all temperature logs for ${date}?`)) {
-      const updatedLogs = logs.filter(l => l.date !== date);
-      localStorage.setItem('temp_logs_v2', JSON.stringify(updatedLogs));
-      setLogs(updatedLogs);
+  const periodLabel = (() => {
+    const period = logType === 'temperature' ? 'week' : checklistFrequency;
+    const d = new Date(currentDate);
+    if (period === 'daily' || period === 'week') {
+      return `${dateColumns[0]} — ${dateColumns[6]}`;
+    } else if (period === 'weekly') {
+      return `Weeks ${getWeek(d)-3} to ${getWeek(d)}, ${d.getFullYear()}`;
+    } else {
+      return d.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
     }
-  };
-
-  const deleteChecklistLog = (date: string) => {
-    if (window.confirm('Delete this checklist log permanently?')) {
-      const updated = checklistLogs.filter(l => l.date !== date);
-      localStorage.setItem('checklist_logs_v1', JSON.stringify(updated));
-      setChecklistLogs(updated);
-    }
-  };
-
-  const deleteInventoryLog = (date: string) => {
-    if (window.confirm('Delete this inventory log permanently?')) {
-      const updated = inventoryLogs.filter(l => l.date !== date);
-      localStorage.setItem('inventory_logs_v1', JSON.stringify(updated));
-      setInventoryLogs(updated);
-    }
-  };
+  })();
 
   return (
     <IonPage className="his-page-root">
       <style>{`
         .his-page-root .history-main-container {
           background-color: #FDFCF4;
-          min-height: 100%;
           display: flex;
           flex-direction: column;
+          position: relative;
+          overflow: auto;
         }
 
         .his-page-root .header-espresso {
@@ -169,10 +254,10 @@ const History: React.FC = () => {
         .his-page-root .content-area {
           padding: 20px 20px 120px;
           margin-top: -20px;
-          flex: 1;
           display: flex;
           flex-direction: column;
           align-items: center;
+          overflow-y: auto;
         }
 
         .his-page-root .m3-selector {
@@ -310,8 +395,8 @@ const History: React.FC = () => {
         .his-page-root .nav-tab.active .nav-indicator { background: #2D1B1412; transform: translateY(-2px); }
 
         .his-page-root .log-item-row {
-          padding: 18px 24px;
-          border-bottom: 1px solid #FDFCF4;
+          padding: 20px 24px;
+          border-bottom: 1px solid #F8F5F2;
           display: flex;
           justify-content: space-between;
           align-items: center;
@@ -319,74 +404,99 @@ const History: React.FC = () => {
         }
         .his-page-root .log-item-row:hover { background: #FDFCF4; }
 
-        .his-page-root .trash-btn {
-          color: #E57373;
-          background: none;
-          border: none;
-          padding: 8px;
-          font-size: 1.4rem;
-          cursor: pointer;
-          transition: transform 0.2s;
-        }
-        .his-page-root .trash-btn:active { transform: scale(0.9); }
-
         .his-page-root .header-day-group {
           display: flex;
           flex-direction: column;
           align-items: center;
           gap: 4px;
+          padding: 8px 0;
         }
 
-        .his-page-root .day-delete-trigger {
-          opacity: 0.2;
-          transition: opacity 0.2s;
-          color: #E57373;
-          font-size: 1rem;
+        .his-page-root .day-delete-btn {
+          opacity: 0.3;
+          transition: all 0.2s;
+          color: #B3261E;
+          font-size: 1.1rem;
           cursor: pointer;
           border: none;
-          background: none;
+          background: #FDFCF4;
+          width: 36px;
+          height: 36px;
+          border-radius: 12px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin-top: 6px;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.05);
         }
-        .his-page-root th:hover .day-delete-trigger { opacity: 1; }
-
-        .his-page-root .side-sheet-m3 {
-          position: fixed;
-          top: 0;
-          right: -100%;
-          width: 100%;
-          height: 100%;
-          background: white;
-          z-index: 3000;
-          transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-          padding: 24px;
-          display: flex; flex-direction: column;
-          box-shadow: -15px 0 50px rgba(0,0,0,0.2);
-          transform: translateX(100%);
-        }
-        .his-page-root .side-sheet-m3.active { transform: translateX(0); }
-        
-        .his-page-root .scrim-m3 {
-          position: fixed;
-          inset: 0;
-          background: rgba(0, 0, 0, 0.6);
-          backdrop-filter: blur(8px);
-          z-index: 2500;
-          opacity: 0;
-          pointer-events: none;
-          transition: opacity 0.5s ease;
-        }
-        .his-page-root .scrim-m3.active { opacity: 1; pointer-events: auto; }
+        .his-page-root th:hover .day-delete-btn { opacity: 1; }
+        .his-page-root .day-delete-btn:hover { background: #B3261E; color: white; transform: translateY(-2px); box-shadow: 0 4px 8px rgba(179, 38, 30, 0.2); }
 
         .his-page-root .icon-btn-m3 {
-          width: 40px;
-          height: 40px;
+          width: 44px;
+          height: 44px;
           border-radius: 50%;
-          background: rgba(255, 255, 255, 0.1);
+          background: rgba(255, 255, 255, 0.12);
           color: white;
           display: flex;
           align-items: center;
           justify-content: center;
-          border: 1px solid rgba(255, 255, 255, 0.1);
+          border: 1px solid rgba(255, 255, 255, 0.15);
           transition: all 0.2s;
+          cursor: pointer;
+        }
+        .his-page-root .icon-btn-m3:active { transform: scale(0.9); background: rgba(255,255,255,0.25); }
+        .his-page-root .refresh-anim { animation: rotate 1s linear infinite; }
+        @keyframes rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+        .his-page-root .side-sheet-m3 {
+          position: fixed; top: 0; right: 0; width: 320px; height: 100%; background: white;
+          z-index: 3000; transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1); padding: 40px 28px;
+          display: flex; flex-direction: column; box-shadow: -15px 0 50px rgba(0,0,0,0.2);
+          transform: translateX(100%);
+        }
+        .his-page-root .side-sheet-m3.active { transform: translateX(0); }
+
+        .his-page-root .scrim-m3 { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(8px); z-index: 2500; opacity: 0; pointer-events: none; transition: opacity 0.5s ease; }
+        .his-page-root .scrim-m3.active { opacity: 1; pointer-events: auto; }
+
+        .his-page-root .task-history-item {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+          padding: 20px;
+          background: white;
+          border-radius: 24px;
+          border: 1px solid #E1E3D3;
+          margin-bottom: 16px;
+          box-shadow: 0 4px 12px rgba(45, 27, 20, 0.03);
+          width: 100%;
+          max-width: 1400px;
+        }
+
+        .his-page-root .task-meta-row {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          flex-wrap: wrap;
+        }
+
+        .his-page-root .task-badge-outline {
+          padding: 4px 12px;
+          border-radius: 100px;
+          font-size: 0.7rem;
+          font-weight: 800;
+          border: 1.5px solid #E1E3D3;
+          color: #8D6E63;
+          text-transform: uppercase;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+        
+        .his-page-root .completion-cell {
+          font-size: 1.6rem;
+          color: #2E7D32;
         }
 
         @media (max-width: 768px) {
@@ -394,22 +504,20 @@ const History: React.FC = () => {
           .his-page-root .content-area { padding: 16px; margin-top: -20px; }
           .his-page-root .week-nav { flex-direction: column; gap: 12px; padding: 16px; }
           .his-page-root .grid-card { padding: 16px; border-radius: 24px;}
-          .his-page-root .log-item-row { flex-direction: column; align-items: flex-start; gap: 12px; padding: 16px; }
           .his-page-root table { min-width: 700px; }
           .his-page-root .sticky-unit { width: 150px !important; min-width: 150px; padding-left: 16px; }
           .his-page-root th, .his-page-root td { padding: 8px 4px; }
+          .his-page-root .side-sheet-m3 { width: 100%; }
         }
 
         @media (min-width: 768px) {
           .his-page-root .side-sheet-m3 {
-            width: 340px;
             border-radius: 40px 0 0 40px;
           }
         }
       `}</style>
 
-      <IonContent scrollY={true}>
-        <div className="history-main-container">
+      <IonContent>
           <header className="header-espresso">
             <div className="top-bar-nav">
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -419,6 +527,9 @@ const History: React.FC = () => {
                 <span style={{ fontWeight: 900, fontSize: '1.4rem', color: 'white', textShadow: '0 2px 4px rgba(0,0,0,0.3)' }}>NexusPour</span>
               </div>
               <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                <button className={`icon-btn-m3 ${isRefreshing ? 'refresh-anim' : ''}`} onClick={() => loadAllLogs()} title="Refresh Data">
+                  <IonIcon icon={refreshOutline} style={{ fontSize: '1.4rem' }} />
+                </button>
                 <button className="icon-btn-m3" onClick={() => setShowNotifications(true)}>
                   <IonIcon icon={notificationsOutline} style={{ fontSize: '1.3rem' }} />
                 </button>
@@ -431,17 +542,20 @@ const History: React.FC = () => {
               </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginTop: '30px', width: '100%', maxWidth: '1400px' }}>
-              <button style={{ width: '40px', height: '40px', borderRadius: '12px', background: 'rgba(255,255,255,0.1)', border: 'none', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => history.goBack()}>
+              <button style={{ width: '40px', height: '40px', borderRadius: '12px', background: 'rgba(255,255,255,0.1)', border: 'none', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} onClick={() => history.push('/dashboard')}>
                 <IonIcon icon={chevronBackOutline} style={{ fontSize: '1.2rem' }} />
               </button>
               <h1 style={{ margin: 0, fontSize: '2rem', fontWeight: 800, color: 'white' }}>Historical Logs</h1>
             </div>
+
+            {isRefreshing && <IonProgressBar type="indeterminate" color="light" style={{ position: 'absolute', bottom: 0, left: 0, zIndex: 20 }} />}
+
             <svg className="liquid-wave" viewBox="0 0 1440 120" preserveAspectRatio="none">
               <path d="M0,32L60,42.7C120,53,240,75,360,74.7C480,75,600,53,720,48C840,43,960,53,1080,58.7C1200,64,1320,64,1380,64L1440,64L1440,120L1380,120C1320,120,1200,120,1080,120C960,120,840,120,720,120C600,120,480,120,360,120C240,120,120,120,60,120L0,120Z"></path>
             </svg>
           </header>
 
-          <main className="content-area">
+          <div className="content-area">
             <div className="m3-selector">
               <button className={`type-tab ${logType === 'temperature' ? 'active' : ''}`} onClick={() => setLogType('temperature')}>Temps</button>
               <button className={`type-tab ${logType === 'checklist' ? 'active' : ''}`} onClick={() => setLogType('checklist')}>Tasks</button>
@@ -449,16 +563,16 @@ const History: React.FC = () => {
             </div>
 
             <div className="week-nav">
-              <button onClick={() => changeWeek(-1)} style={{ background: 'white', border: 'none', width: '36px', height: '36px', borderRadius: '10px', color: '#2D1B14', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}><IonIcon icon={chevronBack} /></button>
+              <button onClick={() => changePeriod(-1)} style={{ background: 'white', border: 'none', width: '36px', height: '36px', borderRadius: '10px', color: '#2D1B14', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', cursor: 'pointer' }}><IonIcon icon={chevronBack} /></button>
               <div style={{ textAlign: 'center' }}>
                 <span style={{ fontSize: '0.7rem', fontWeight: 900, color: '#8D6E63', letterSpacing: '1.5px', display: 'block', marginBottom: '4px' }}>SHIFT ARCHIVE</span>
-                <div style={{ fontWeight: 800, color: '#2D1B14', fontSize: '1.2rem' }}>{weekDays[0]} — {weekDays[6]}</div>
+                <div style={{ fontWeight: 800, color: '#2D1B14', fontSize: '1.2rem' }}>{periodLabel}</div>
               </div>
-              <button onClick={() => changeWeek(1)} style={{ background: 'white', border: 'none', width: '36px', height: '36px', borderRadius: '10px', color: '#2D1B14', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}><IonIcon icon={chevronForward} /></button>
+              <button onClick={() => changePeriod(1)} style={{ background: 'white', border: 'none', width: '36px', height: '36px', borderRadius: '10px', color: '#2D1B14', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', cursor: 'pointer' }}><IonIcon icon={chevronForward} /></button>
             </div>
 
             {logType === 'temperature' && (
-              <div className={`grid-card ${isLoaded ? 'loaded' : ''}`}>
+              <div key="temp-log" className={`grid-card ${isLoaded ? 'loaded' : ''}`}>
                 <div className="table-viewport">
                   <table>
                     <thead>
@@ -468,8 +582,8 @@ const History: React.FC = () => {
                           <th key={day}>
                             <div className="header-day-group">
                               <span>{day}</span>
-                              <span style={{ opacity: 0.6, fontSize: '0.65rem' }}>{weekDays[i].slice(8,10)}/{weekDays[i].slice(5,7)}</span>
-                              <button className="day-delete-trigger" onClick={() => deleteTempLogsForDate(weekDays[i])} aria-label={`Delete logs for ${weekDays[i]}`}>
+                              <span style={{ opacity: 0.6, fontSize: '0.65rem' }}>{dateColumns[i].split('-')[2]}/{dateColumns[i].split('-')[1]}</span>
+                              <button className="day-delete-btn" onClick={() => setDeleteAlertInfo({ isOpen: true, date: dateColumns[i] })} title="Delete this day's logs">
                                 <IonIcon icon={trashOutline} />
                               </button>
                             </div>
@@ -482,7 +596,7 @@ const History: React.FC = () => {
                       {allLocations.map(loc => (
                         <tr key={loc}>
                           <td className="sticky-unit">{loc}</td>
-                          {weekDays.map(date => {
+                          {dateColumns.map(date => {
                             const r = getReading(date, loc);
                             return (
                               <td key={date}>
@@ -501,45 +615,60 @@ const History: React.FC = () => {
             )}
 
             {logType === 'checklist' && (
-              <div className={`grid-card ${isLoaded ? 'loaded' : ''}`} style={{ padding: '0' }}>
-                {checklistLogs.length === 0 && <div style={{ padding: '60px', opacity: 0.5, textAlign: 'center', fontWeight: 700 }}>No checklist logs found.</div>}
-                {checklistLogs.map((log, idx) => (
-                  <div key={idx} className="log-item-row">
-                    <div>
-                      <div style={{ fontWeight: 900, color: '#2D1B14', fontSize: '1.1rem' }}>{log.date}</div>
-                      <div style={{ fontSize: '0.8rem', fontWeight: 700, opacity: 0.6 }}>Shift Completion Log</div>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                      <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#2E7D32', background: '#E8F5E9', padding: '6px 14px', borderRadius: '10px' }}>{log.completed}/{log.total} DONE</div>
-                      <button className="trash-btn" onClick={() => deleteChecklistLog(log.date)}><IonIcon icon={trashOutline} /></button>
-                    </div>
+              <div key="checklist-log" className="grid-max" style={{ opacity: isLoaded ? 1 : 0, transition: '0.6s ease-out', width: '100%', display: 'flex', justifyContent: 'center' }}>
+                  <div className="m3-selector" style={{ maxWidth: '400px', margin: '0 auto 24px' }}>
+                      <button className={`type-tab ${checklistFrequency === 'daily' ? 'active' : ''}`} onClick={() => setChecklistFrequency('daily')}>Daily</button>
+                      <button className={`type-tab ${checklistFrequency === 'weekly' ? 'active' : ''}`} onClick={() => setChecklistFrequency('weekly')}>Weekly</button>
+                      <button className={`type-tab ${checklistFrequency === 'monthly' ? 'active' : ''}`} onClick={() => setChecklistFrequency('monthly')}>Monthly</button>
                   </div>
-                ))}
+                  <div className={`grid-card ${isLoaded ? 'loaded' : ''}`} style={{ margin: '0 auto', padding: 0 }}>
+                    <ChecklistHistoryTable tasks={checklistRequirements} dates={dateColumns} frequency={checklistFrequency} />
+                  </div>
               </div>
             )}
 
             {logType === 'inventory' && (
-              <div className={`grid-card ${isLoaded ? 'loaded' : ''}`} style={{ padding: '0' }}>
+              <div key="inventory-log" className={`grid-card ${isLoaded ? 'loaded' : ''}`} style={{ padding: '0' }}>
                 {inventoryLogs.length === 0 && <div style={{ padding: '60px', opacity: 0.5, textAlign: 'center', fontWeight: 700 }}>No inventory logs found.</div>}
-                {inventoryLogs.map((log, idx) => (
-                  <div key={idx} className="log-item-row">
-                    <div>
-                      <div style={{ fontWeight: 900, color: '#2D1B14', fontSize: '1.1rem' }}>{log.date}</div>
-                      <div style={{ fontSize: '0.8rem', fontWeight: 700, opacity: 0.6 }}>Stock Level Audit</div>
+                {inventoryLogs.map((log, idx) => {
+                  let totalItems = log.total;
+                  if (!totalItems && log.log_data) {
+                    try {
+                      totalItems = JSON.parse(log.log_data).total;
+                    } catch(e) { totalItems = 0; }
+                  }
+                  return (
+                    <div key={idx} className="log-item-row">
+                      <div>
+                        <div style={{ fontWeight: 900, color: '#2D1B14', fontSize: '1.1rem' }}>{log.date}</div>
+                        <div style={{ fontSize: '0.8rem', fontWeight: 700, opacity: 0.6 }}>Stock Level Audit</div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                        <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#2E7D32', background: '#E8F5E9', padding: '6px 14px', borderRadius: '10px' }}>{totalItems || 0} ITEMS</div>
+                      </div>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                      <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#2D1B14', background: '#F8F5F2', padding: '6px 14px', borderRadius: '10px' }}>{log.total} ITEMS</div>
-                      <button className="trash-btn" onClick={() => deleteInventoryLog(log.date)}><IonIcon icon={trashOutline} /></button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
-          </main>
-        </div>
+          </div>
       </IonContent>
 
-      <div className="m3-nav">
+      <nav className="m3-footer-nav" style={{
+          background: '#ffffff',
+          height: '85px',
+          display: 'flex',
+          borderTop: '1px solid #E1E3D3',
+          paddingBottom: 'env(safe-area-inset-bottom)',
+          boxShadow: '0 -4px 20px rgba(0,0,0,0.05)',
+          width: '100%',
+          justifyContent: 'space-around',
+          position: 'fixed',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          zIndex: 1000
+      }}>
         <div className="nav-tab" onClick={() => history.push('/dashboard')}>
           <div className="nav-indicator"><IonIcon icon={home} /></div>
           <span>Home</span>
@@ -548,7 +677,7 @@ const History: React.FC = () => {
           <div className="nav-indicator"><IonIcon icon={thermometerOutline} /></div>
           <span>Temps</span>
         </div>
-        <div className="nav-tab active">
+        <div className="nav-tab" onClick={() => history.push('/checklist')}>
           <div className="nav-indicator"><IonIcon icon={clipboardOutline} /></div>
           <span>Checks</span>
         </div>
@@ -556,7 +685,11 @@ const History: React.FC = () => {
           <div className="nav-indicator"><IonIcon icon={albumsOutline} /></div>
           <span>Stock</span>
         </div>
-      </div>
+        <div className="nav-tab" onClick={() => history.push('/allergens')}>
+          <div className="nav-indicator"><IonIcon icon={warningOutline} /></div>
+          <span>Allergens</span>
+        </div>
+      </nav>
 
       <div className={`scrim-m3 ${showAdminSidebar || showNotifications ? 'active' : ''}`}
            onClick={() => { setShowAdminSidebar(false); setShowNotifications(false); }} />
@@ -570,10 +703,6 @@ const History: React.FC = () => {
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <p style={{ fontWeight: 700, opacity: 0.5, fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Storage Management</p>
-            <div className="log-item-row" style={{ background: '#F8F5F2', borderRadius: '20px', border: 'none' }} onClick={() => { if(window.confirm("Clear all logs permanently?")) { localStorage.clear(); window.location.reload(); } }}>
-              <span style={{ fontWeight: 800, color: '#B3261E' }}>Wipe All Data</span>
-              <IonIcon icon={trashOutline} style={{ color: '#B3261E', fontSize: '1.4rem' }} />
-            </div>
         </div>
       </aside>
 
@@ -589,9 +718,28 @@ const History: React.FC = () => {
           <p style={{ fontWeight: 700 }}>No new alerts</p>
         </div>
       </aside>
+
+      <IonAlert
+        isOpen={deleteAlertInfo.isOpen}
+        onDidDismiss={() => setDeleteAlertInfo({ isOpen: false, date: '' })}
+        header={'Clear Day Logs?'}
+        message={`Are you sure you want to delete all temperature readings for ${deleteAlertInfo.date}? This cannot be undone.`}
+        buttons={[
+          { text: 'Cancel', role: 'cancel' },
+          { text: 'Delete', handler: () => deleteDayLogs(deleteAlertInfo.date) }
+        ]}
+      />
+
+      <IonToast
+        isOpen={showToast.show}
+        onDidDismiss={() => setShowToast({ ...showToast, show: false })}
+        message={showToast.message}
+        duration={3000}
+        color={showToast.color}
+        position="bottom"
+      />
     </IonPage>
   );
 };
 
 export default History;
-

@@ -42,86 +42,86 @@ const Dashboard: React.FC = () => {
   const [importFormat, setImportFormat] = useState<'json' | 'zip'>('json');
   const [isLoaded, setIsLoaded] = useState(false);
 
-  const [archivedFiles, setArchivedFiles] = useState<{name: string, data: any, date: string}[]>(() => {
-    try {
-      const saved = localStorage.getItem('cafeops_reserved_archives_v1');
-      return saved ? JSON.parse(saved) : [];
-    } catch (e) {
-      return [];
-    }
-  });
+  const [archivedFiles, setArchivedFiles] = useState<{name: string, data: any, date: string}[]>([]);
+
+  useEffect(() => {
+    fetch('/api/archives')
+      .then(res => res.json())
+      .then(setArchivedFiles)
+      .catch(err => console.error("Failed to fetch archives", err));
+  }, []);
 
   useEffect(() => {
     const timer = setTimeout(() => setIsLoaded(true), 150);
     return () => clearTimeout(timer);
   }, []);
 
-  const STORAGE_KEYS = [
-    'temp_logs_v2', 'checklist', 'checklist_logs_v1',
-    'stock_list', 'inventory_logs_v1', 'cafe_sections_v1', 'master_fridges_v1',
-    'allergens_map_v1', 'cafeops_dishes_v1', 'cafeops_checklists_v3', 'cafeops_stock_master_v2'
-  ];
-
   const saveToArchive = (name: string, data: any) => {
     const newArchive = { name, data, date: new Date().toLocaleString() };
-    const updated = [newArchive, ...archivedFiles].slice(0, 15);
-    setArchivedFiles(updated);
-    localStorage.setItem('cafeops_reserved_archives_v1', JSON.stringify(updated));
+    fetch('/api/archives', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newArchive)
+    })
+    .then(res => res.json())
+    .then(saved => setArchivedFiles(prev => [saved, ...prev]))
+    .catch(err => console.error("Failed to save archive", err));
   };
 
   const restoreFromArchive = (archive: any) => {
-    try {
-      const data = archive.data;
-      Object.entries(data).forEach(([key, value]) => {
-        if (STORAGE_KEYS.includes(key)) localStorage.setItem(key, JSON.stringify(value));
-      });
+    fetch('/api/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(archive.data)
+    })
+    .then(() => {
       alert('System restored. Reloading...');
       window.location.reload();
-    } catch (e) {
-      alert('Restore failed');
-    }
+    })
+    .catch(() => alert('Restore failed'));
   };
 
   const deleteArchive = (index: number) => {
+    const archive = archivedFiles[index];
     if (window.confirm('Delete this backup?')) {
-      const updated = archivedFiles.filter((_, i) => i !== index);
-      setArchivedFiles(updated);
-      localStorage.setItem('cafeops_reserved_archives_v1', JSON.stringify(updated));
+      fetch(`/api/archives/${(archive as any).id}`, { method: 'DELETE' })
+      .then(() => setArchivedFiles(prev => prev.filter((_, i) => i !== index)))
+      .catch(err => console.error("Failed to delete archive", err));
     }
   };
 
   const exportData = async (format: 'json' | 'zip') => {
-    const data: Record<string, any> = {};
-    STORAGE_KEYS.forEach(key => {
-      const value = localStorage.getItem(key);
-      data[key] = value ? JSON.parse(value) : null;
-    });
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const jsonStr = JSON.stringify(data, null, 2);
-    if (format === 'json') {
-      const blob = new Blob([jsonStr], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `cafeops-backup-${timestamp}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } else {
-      const zip = new JSZip();
-      STORAGE_KEYS.forEach(key => {
-        const value = localStorage.getItem(key);
-        zip.file(`${key}.json`, value || 'null');
-      });
-      const blob = await zip.generateAsync({ type: 'blob' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `cafeops-backup-${timestamp}.zip`;
-      a.click();
-      URL.revokeObjectURL(url);
+    try {
+      const res = await fetch('/api/export');
+      const data = await res.json();
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const jsonStr = JSON.stringify(data, null, 2);
+      if (format === 'json') {
+        const blob = new Blob([jsonStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `cafeops-backup-${timestamp}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+      } else {
+        const zip = new JSZip();
+        Object.entries(data).forEach(([key, value]) => {
+          zip.file(`${key}.json`, JSON.stringify(value, null, 2) || 'null');
+        });
+        const blob = await zip.generateAsync({ type: 'blob' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `cafeops-backup-${timestamp}.zip`;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+      saveToArchive(`Manual Backup (${timestamp})`, data);
+      setShowExportFormat(false);
+    } catch (err) {
+      console.error("Export failed", err);
     }
-    saveToArchive(`Manual Backup (${timestamp})`, data);
-    setShowExportFormat(false);
   };
 
   const importData = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -130,8 +130,10 @@ const Dashboard: React.FC = () => {
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      Object.entries(data).forEach(([key, value]) => {
-        if (STORAGE_KEYS.includes(key)) localStorage.setItem(key, JSON.stringify(value));
+      await fetch('/api/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
       });
       saveToArchive(file.name, data);
       alert('Import successful and reserved.');
@@ -166,10 +168,9 @@ const Dashboard: React.FC = () => {
           overflow: hidden;
         }
 
-        /* Splash Coffee Header */
         .espresso-header {
           background: #2D1B14;
-          padding: 60px 24px 80px; /* Increased top padding for breathing room */
+          padding: 60px 24px 80px;
           color: white;
           width: 100%;
           position: relative;
@@ -195,7 +196,7 @@ const Dashboard: React.FC = () => {
           justify-content: space-between;
           align-items: center;
           width: 100%;
-          max-width: 1100px; /* Slightly tighter max-width for better focus */
+          max-width: 1100px;
           z-index: 10;
         }
 
@@ -381,7 +382,7 @@ const Dashboard: React.FC = () => {
           justify-content: center;
           transition: all 0.3s ease;
           margin-bottom: 4px;
-          width: 64px; /* Fixed width to prevent stretching */
+          width: 64px;
           height: 32px;
         }
 
@@ -401,62 +402,21 @@ const Dashboard: React.FC = () => {
         .scrim { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(8px); z-index: 2500; opacity: 0; pointer-events: none; transition: opacity 0.5s ease; }
         .scrim.active { opacity: 1; pointer-events: auto; }
 
-        /* Mobile Responsive Styles */
         @media (max-width: 768px) {
-          .espresso-header {
-            padding: 40px 16px 60px;
-          }
-          .logo-text {
-            font-size: 1.5rem;
-          }
-          .logo-icon-box {
-            width: 44px;
-            height: 44px;
-            border-radius: 12px;
-          }
-          .header-actions {
-            gap: 8px;
-          }
-          .icon-btn-m3 {
-            width: 40px;
-            height: 40px;
-          }
-          .icon-btn-m3 ion-icon {
-            font-size: 1.3rem;
-          }
-          .hero-greet h2 {
-            font-size: 1.8rem;
-          }
-          .hero-greet {
-            margin-top: 24px;
-          }
-          .status-pill-m3 {
-            padding: 8px 16px;
-            font-size: 0.75rem;
-            margin-top: 16px;
-          }
-          .m3-card-wide {
-            padding: 16px;
-            gap: 16px;
-            border-radius: 24px;
-          }
-          .card-icon-m3 {
-            width: 48px;
-            height: 48px;
-            font-size: 1.8rem;
-            border-radius: 16px;
-          }
-          .card-title-m3 {
-            font-size: 1.1rem;
-          }
-          .card-desc-m3 {
-            font-size: 0.85rem;
-          }
-          .side-sheet {
-            width: 100%;
-            right: -100%;
-            border-radius: 0;
-          }
+          .espresso-header { padding: 40px 16px 60px; }
+          .logo-text { font-size: 1.5rem; }
+          .logo-icon-box { width: 44px; height: 44px; border-radius: 12px; }
+          .header-actions { gap: 8px; }
+          .icon-btn-m3 { width: 40px; height: 40px; }
+          .icon-btn-m3 ion-icon { font-size: 1.3rem; }
+          .hero-greet h2 { font-size: 1.8rem; }
+          .hero-greet { margin-top: 24px; }
+          .status-pill-m3 { padding: 8px 16px; font-size: 0.75rem; margin-top: 16px; }
+          .m3-card-wide { padding: 16px; gap: 16px; border-radius: 24px; }
+          .card-icon-m3 { width: 48px; height: 48px; font-size: 1.8rem; border-radius: 16px; }
+          .card-title-m3 { font-size: 1.1rem; }
+          .card-desc-m3 { font-size: 0.85rem; }
+          .side-sheet { width: 100%; right: -100%; border-radius: 0; }
         }
       `}</style>
 
@@ -520,34 +480,6 @@ const Dashboard: React.FC = () => {
                   ))}
                 </IonRow>
               </IonGrid>
-            </div>
-
-            <div style={{ marginTop: '32px', width: '100%', maxWidth: '1100px', padding: '0 8px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                <h3 style={{ margin: 0, fontWeight: 900, color: '#2D1B14', fontSize: '1.4rem' }}>Archives</h3>
-                <IonButton fill="clear" size="small" onClick={() => setShowArchive(!showArchive)} style={{ fontWeight: 800 }}>
-                  {showArchive ? 'Hide' : 'Reserved Storage'}
-                </IonButton>
-              </div>
-
-              {showArchive && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {archivedFiles.length === 0 && <p style={{ textAlign: 'center', opacity: 0.5, padding: '20px' }}>No backups reserved.</p>}
-                  {archivedFiles.map((archive, idx) => (
-                    <div key={idx} className="m3-card-wide" style={{ opacity: 1, transform: 'none', margin: 0, padding: '20px' }}>
-                      <IonIcon icon={archiveOutline} style={{ fontSize: '1.8rem', color: '#2D1B14' }} />
-                      <div style={{ flex: 1 }}>
-                        <p style={{ margin: 0, fontWeight: 800, fontSize: '1.1rem', color: '#2D1B14' }}>{archive.name}</p>
-                        <p style={{ margin: 0, fontSize: '0.8rem', opacity: 0.6, fontWeight: 700 }}>{archive.date}</p>
-                      </div>
-                      <div style={{ display: 'flex', gap: 8 }}>
-                        <button onClick={() => restoreFromArchive(archive)} style={{ background: '#2D1B14', color: 'white', padding: '10px 18px', border: 'none', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 900 }}>Restore</button>
-                        <button onClick={() => deleteArchive(idx)} style={{ color: '#E57373', fontSize: '1.5rem', background: 'none', border: 'none' }} aria-label="Delete backup"><IonIcon icon={trashOutline} /></button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           </main>
 
@@ -644,4 +576,3 @@ const Dashboard: React.FC = () => {
 };
 
 export default Dashboard;
-

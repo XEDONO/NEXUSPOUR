@@ -4,18 +4,25 @@ type Props = {
   onChange?: (sections: string[]) => void;
 };
 
-const STORAGE_KEY = 'cafe_sections_v1';
+const API_URL = 'http://localhost:3001/api/sections';
 
-function loadSections(): string[] {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]') || []; } catch { return []; }
+function loadSections(callback: (s: string[]) => void) {
+  fetch(API_URL).then(res => res.json()).then(callback);
 }
 
-function saveSections(s: string[]) { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); }
+function saveSections(s: string[]) {
+  fetch(API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sections: s })
+  });
+}
 
 const SectionsManager: React.FC<Props> = ({ onChange }) => {
-  const [sections, setSections] = useState<string[]>(() => loadSections());
+  const [sections, setSections] = useState<string[]>([]);
   const [value, setValue] = useState('');
 
+  useEffect(() => { loadSections(setSections); }, []);
   useEffect(() => onChange?.(sections), [sections]);
 
   function add() {
