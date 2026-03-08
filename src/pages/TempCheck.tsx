@@ -443,6 +443,7 @@ const TempCheck: React.FC = () => {
         <div className="fab-menu-container">
           {showFabMenu && (
             <>
+              <button className="fab-action-m3" onClick={fetchData} aria-label="Refresh Data"><IonIcon icon={refreshOutline} /></button>
               <button className="fab-action-m3" onClick={saveToHistory} aria-label="Save to History"><IonIcon icon={saveOutline} /></button>
               <button className="fab-action-m3" onClick={() => {setShowAddFridgeModal(true); setShowFabMenu(false);}} aria-label="Add Unit"><IonIcon icon={addOutline} /></button>
               <button className="fab-action-m3" onClick={() => {setShowManageUnitsModal(true); setShowFabMenu(false);}} aria-label="Manage Units"><IonIcon icon={constructOutline} /></button>

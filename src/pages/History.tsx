@@ -501,7 +501,7 @@ const History: React.FC = () => {
 
         @media (max-width: 768px) {
           .his-page-root .header-espresso { padding: 16px 16px 30px; }
-          .his-page-root .content-area { padding: 16px; margin-top: -20px; }
+          .his-page-root .content-area { padding: 16px 16px 120px; margin-top: -20px; }
           .his-page-root .week-nav { flex-direction: column; gap: 12px; padding: 16px; }
           .his-page-root .grid-card { padding: 16px; border-radius: 24px;}
           .his-page-root table { min-width: 700px; }
@@ -615,7 +615,7 @@ const History: React.FC = () => {
             )}
 
             {logType === 'checklist' && (
-              <div key="checklist-log" className="grid-max" style={{ opacity: isLoaded ? 1 : 0, transition: '0.6s ease-out', width: '100%', display: 'flex', justifyContent: 'center' }}>
+              <div key="checklist-log" className="grid-max" style={{ opacity: isLoaded ? 1 : 0, transition: '0.6s ease-out', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                   <div className="m3-selector" style={{ maxWidth: '400px', margin: '0 auto 24px' }}>
                       <button className={`type-tab ${checklistFrequency === 'daily' ? 'active' : ''}`} onClick={() => setChecklistFrequency('daily')}>Daily</button>
                       <button className={`type-tab ${checklistFrequency === 'weekly' ? 'active' : ''}`} onClick={() => setChecklistFrequency('weekly')}>Weekly</button>

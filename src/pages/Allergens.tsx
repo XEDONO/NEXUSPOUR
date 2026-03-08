@@ -28,7 +28,8 @@ import {
   sparklesOutline,
   listOutline,
   timeOutline,
-  downloadOutline
+  downloadOutline,
+  refreshOutline
 } from 'ionicons/icons';
 import { useHistory } from 'react-router-dom';
 
@@ -58,7 +59,7 @@ const ALLERGENS = [
 const Allergens: React.FC = () => {
   const history = useHistory();
   const [isLoaded, setIsLoaded] = useState(false);
-  const [searchQuery, setSearchOutline] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [showAddDish, setShowAddDish] = useState(false);
   const [showAdminSidebar, setShowAdminSidebar] = useState(false);
   const [newDishName, setNewDishName] = useState('');
@@ -66,12 +67,34 @@ const Allergens: React.FC = () => {
 
   const [dishes, setDishes] = useState<Dish[]>([]);
 
-  useEffect(() => {
-    const timer = setTimeout(() => setIsLoaded(true), 150);
+  const loadDishes = () => {
     fetch('http://localhost:3001/api/allergens')
       .then(res => res.json())
-      .then(data => setDishes(data.map((d: any) => ({ ...d, allergens: JSON.parse(d.allergens) }))))
+      .then(data => {
+        const parsedDishes = data.map((d: any) => {
+          let allergens = [];
+          if (typeof d.allergens === 'string') {
+            try {
+              const parsed = JSON.parse(d.allergens);
+              if (Array.isArray(parsed)) {
+                allergens = parsed;
+              }
+            } catch (e) {
+              console.error('Could not parse allergens from string:', d.allergens);
+            }
+          } else if (Array.isArray(d.allergens)) {
+            allergens = d.allergens;
+          }
+          return { ...d, name: d.dish || d.name || '', allergens };
+        });
+        setDishes(parsedDishes);
+      })
       .catch(console.error);
+  };
+
+  useEffect(() => {
+    const timer = setTimeout(() => setIsLoaded(true), 150);
+    loadDishes();
     return () => clearTimeout(timer);
   }, []);
 
@@ -99,7 +122,23 @@ const Allergens: React.FC = () => {
     })
     .then(res => res.json())
     .then(addedDish => {
-      setDishes(prev => [{ ...addedDish, allergens: JSON.parse(addedDish.allergens) }, ...prev]);
+      let allergens = [];
+      if (typeof addedDish.allergens === 'string') {
+        try {
+          const parsed = JSON.parse(addedDish.allergens);
+          if (Array.isArray(parsed)) {
+            allergens = parsed;
+          }
+        } catch (e) {
+          console.error('Could not parse allergens from string:', addedDish.allergens);
+        }
+      } else if (Array.isArray(addedDish.allergens)) {
+        allergens = addedDish.allergens;
+      }
+
+      const dishToAdd = { ...addedDish, name: addedDish.dish || addedDish.name || newDishName.trim(), allergens };
+
+      setDishes(prev => [dishToAdd, ...prev]);
       setNewDishName('');
       setSelectedAllergens([]);
       setShowAddDish(false);
@@ -500,7 +539,7 @@ const Allergens: React.FC = () => {
               <input
                 placeholder="Search dish name..."
                 value={searchQuery}
-                onChange={e => setSearchOutline(e.target.value)}
+                onChange={e => setSearchQuery(e.target.value)}
               />
             </div>
 
@@ -549,6 +588,14 @@ const Allergens: React.FC = () => {
           </div>
         </main>
 
+        <button
+          className="fab-add ion-activatable"
+          style={{ right: '104px', width: '56px', height: '56px', borderRadius: '16px', background: 'var(--m3-surface)', color: 'var(--m3-primary)' }}
+          onClick={loadDishes}
+        >
+          <IonIcon icon={refreshOutline} style={{ fontSize: '2.0rem' }} />
+          <IonRippleEffect />
+        </button>
         <button className="fab-add ion-activatable" onClick={() => setShowAddDish(true)}>
           <IonIcon icon={addOutline} style={{ fontSize: '2.4rem' }} />
           <IonRippleEffect />
