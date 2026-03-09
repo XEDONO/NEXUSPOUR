@@ -32,10 +32,23 @@ import {
 } from 'ionicons/icons';
 import { useHistory } from 'react-router-dom';
 import ChecklistHistoryTable, { TaskRequirement } from '../components/ChecklistHistoryTable';
+import { API_BASE_URL } from '../apiConfig';
 
-const API_BASE = 'http://localhost:3001/api';
+type RestockListItemDetail = {
+  item_name: string;
+  urgency: 'high' | 'medium' | 'low';
+  notes: string | null;
+};
+
+type RestockList = {
+  id: string;
+  createdAt: string;
+  itemCount: number;
+  items?: RestockListItemDetail[];
+};
 
 type FridgeTemplate = { id: string; location: string; expectedMin: number; expectedMax: number };
+
 
 type TemperatureReading = {
   id: string;
@@ -55,16 +68,18 @@ type DailyLog = {
 const History: React.FC = () => {
   const [logs, setLogs] = useState<DailyLog[]>([]);
   const [checklistRequirements, setChecklistRequirements] = useState<TaskRequirement[]>([]);
-  const [inventoryLogs, setInventoryLogs] = useState<any[]>([]);
-  const [logType, setLogType] = useState<'temperature' | 'checklist' | 'inventory'>('temperature');
+  const [restockLists, setRestockLists] = useState<RestockList[]>([]);
+  const [logType, setLogType] = useState<'temperature' | 'checklist' | 'restock'>('temperature');
   const [checklistFrequency, setChecklistFrequency] = useState<'daily' | 'weekly' | 'monthly'>('daily');
   const [showNotifications, setShowNotifications] = useState(false);
   const [showAdminSidebar, setShowAdminSidebar] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [deleteAlertInfo, setDeleteAlertInfo] = useState<{ isOpen: boolean, date: string }>({ isOpen: false, date: '' });
+  const [deleteRestockAlertInfo, setDeleteRestockAlertInfo] = useState<{ isOpen: boolean, listId: string }>({ isOpen: false, listId: '' });
   const [showToast, setShowToast] = useState({ show: false, message: '', color: 'success' });
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [showRestockDetail, setShowRestockDetail] = useState<RestockList | null>(null);
 
   const history = useHistory();
 
@@ -72,9 +87,21 @@ const History: React.FC = () => {
     loadAllLogs();
   }, []);
 
+  const viewRestockDetail = async (list: RestockList) => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/restock-lists/${list.id}`);
+        if (!res.ok) throw new Error('Could not fetch list details.');
+        const detailedList = await res.json();
+        setShowRestockDetail(detailedList);
+    } catch (error) {
+        console.error(error);
+        setShowToast({ show: true, message: 'Could not load list details.', color: 'danger' });
+    }
+  };
+
   const fetchSafe = async (endpoint: string) => {
     try {
-      const res = await fetch(`${API_BASE}/${endpoint}`, { cache: 'no-store' });
+      const res = await fetch(`${API_BASE_URL}/${endpoint}`, { cache: 'no-store' });
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       return await res.json();
     } catch (e) {
@@ -86,11 +113,11 @@ const History: React.FC = () => {
   const loadAllLogs = async () => {
     setIsRefreshing(true);
     try {
-      const [fridgesData, logsData, checklistData, inventoryData] = await Promise.all([
+      const [fridgesData, logsData, checklistData, restockData] = await Promise.all([
         fetchSafe('fridges'),
         fetchSafe('logs'),
         fetchSafe('checklists'),
-        fetchSafe('inventory-logs')
+        fetchSafe('restock-lists')
       ]);
 
       const dailyLogs = (logsData || []).reduce((acc: DailyLog[], log: any) => {
@@ -116,7 +143,7 @@ const History: React.FC = () => {
 
       setLogs(dailyLogs);
       setChecklistRequirements(checklistData || []);
-      setInventoryLogs(inventoryData || []);
+      setRestockLists(restockData || []);
       setIsLoaded(true);
     } finally {
       setIsRefreshing(false);
@@ -125,13 +152,31 @@ const History: React.FC = () => {
 
   const deleteDayLogs = async (date: string) => {
     try {
-      const res = await fetch(`${API_BASE}/logs/day/${date}`, {
+      const res = await fetch(`${API_BASE_URL}/logs/day/${date}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' }
       });
       const result = await res.json();
       if (res.ok) {
         setShowToast({ show: true, message: result.message || `Deleted logs for ${date}`, color: 'success' });
+        loadAllLogs();
+      } else {
+        throw new Error(result.message || 'Delete failed');
+      }
+    } catch (error: any) {
+      setShowToast({ show: true, message: `Error: ${error.message}`, color: 'danger' });
+    }
+  };
+
+  const deleteRestockList = async (id: string) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/restock-lists/${id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const result = await res.json();
+      if (res.ok) {
+        setShowToast({ show: true, message: 'Restock list deleted successfully', color: 'success' });
         loadAllLogs();
       } else {
         throw new Error(result.message || 'Delete failed');
@@ -412,7 +457,7 @@ const History: React.FC = () => {
           padding: 8px 0;
         }
 
-        .his-page-root .day-delete-btn {
+        .his-page-root .day-delete-btn, .his-page-root .restock-delete-btn {
           opacity: 0.3;
           transition: all 0.2s;
           color: #B3261E;
@@ -426,11 +471,19 @@ const History: React.FC = () => {
           display: flex;
           align-items: center;
           justify-content: center;
-          margin-top: 6px;
           box-shadow: 0 2px 4px rgba(0,0,0,0.05);
         }
+        .his-page-root .day-delete-btn { margin-top: 6px; }
         .his-page-root th:hover .day-delete-btn { opacity: 1; }
-        .his-page-root .day-delete-btn:hover { background: #B3261E; color: white; transform: translateY(-2px); box-shadow: 0 4px 8px rgba(179, 38, 30, 0.2); }
+        .his-page-root .log-item-row:hover .restock-delete-btn { opacity: 1; }
+
+        .his-page-root .day-delete-btn:hover, .his-page-root .restock-delete-btn:hover {
+          background: #B3261E;
+          color: white;
+          transform: translateY(-2px);
+          box-shadow: 0 4px 8px rgba(179, 38, 30, 0.2);
+          opacity: 1 !important;
+        }
 
         .his-page-root .icon-btn-m3 {
           width: 44px;
@@ -499,6 +552,15 @@ const History: React.FC = () => {
           color: #2E7D32;
         }
 
+        .his-page-root .modal-blur-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); backdrop-filter: blur(5px); z-index: 4000; display: flex; align-items: center; justify-content: center; padding: 24px; }
+        .his-page-root .m3-dialog-sheet { background: white; border-radius: 24px; padding: 24px; width: 100%; max-width: 360px; box-shadow: 0 15px 35px rgba(0,0,0,0.25); }
+        .his-page-root .unit-manage-item {
+          display: flex; justify-content: space-between; align-items: center;
+          padding: 14px; background: #F8F5F2; border-radius: 14px; margin-bottom: 10px;
+          font-weight: 800;
+          color: #2D1B14;
+        }
+
         @media (max-width: 768px) {
           .his-page-root .header-espresso { padding: 16px 16px 30px; }
           .his-page-root .content-area { padding: 16px 16px 120px; margin-top: -20px; }
@@ -559,7 +621,7 @@ const History: React.FC = () => {
             <div className="m3-selector">
               <button className={`type-tab ${logType === 'temperature' ? 'active' : ''}`} onClick={() => setLogType('temperature')}>Temps</button>
               <button className={`type-tab ${logType === 'checklist' ? 'active' : ''}`} onClick={() => setLogType('checklist')}>Tasks</button>
-              <button className={`type-tab ${logType === 'inventory' ? 'active' : ''}`} onClick={() => setLogType('inventory')}>Stock</button>
+              <button className={`type-tab ${logType === 'restock' ? 'active' : ''}`} onClick={() => setLogType('restock')}>Restock</button>
             </div>
 
             <div className="week-nav">
@@ -627,31 +689,74 @@ const History: React.FC = () => {
               </div>
             )}
 
-            {logType === 'inventory' && (
-              <div key="inventory-log" className={`grid-card ${isLoaded ? 'loaded' : ''}`} style={{ padding: '0' }}>
-                {inventoryLogs.length === 0 && <div style={{ padding: '60px', opacity: 0.5, textAlign: 'center', fontWeight: 700 }}>No inventory logs found.</div>}
-                {inventoryLogs.map((log, idx) => {
-                  let totalItems = log.total;
-                  if (!totalItems && log.log_data) {
-                    try {
-                      totalItems = JSON.parse(log.log_data).total;
-                    } catch(e) { totalItems = 0; }
-                  }
-                  return (
-                    <div key={idx} className="log-item-row">
-                      <div>
-                        <div style={{ fontWeight: 900, color: '#2D1B14', fontSize: '1.1rem' }}>{log.date}</div>
-                        <div style={{ fontSize: '0.8rem', fontWeight: 700, opacity: 0.6 }}>Stock Level Audit</div>
+            {logType === 'restock' && (
+              <div key="restock-log" className={`grid-card ${isLoaded ? 'loaded' : ''}`} style={{ padding: '0' }}>
+                {restockLists.length === 0 && <div style={{ padding: '60px', opacity: 0.5, textAlign: 'center', fontWeight: 700 }}>No restock lists found.</div>}
+                {restockLists.map((list) => (
+                  <div key={list.id} className="log-item-row" onClick={() => viewRestockDetail(list)} style={{cursor: 'pointer'}}>
+                    <div>
+                      <div style={{ fontWeight: 900, color: '#2D1B14', fontSize: '1.1rem' }}>
+                        {new Date(list.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                        <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#2E7D32', background: '#E8F5E9', padding: '6px 14px', borderRadius: '10px' }}>{totalItems || 0} ITEMS</div>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 700, opacity: 0.6 }}>
+                        {new Date(list.createdAt).toLocaleTimeString()}
                       </div>
                     </div>
-                  );
-                })}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#2E7D32', background: '#E8F5E9', padding: '6px 14px', borderRadius: '10px' }}>
+                        {list.itemCount} ITEMS
+                      </div>
+                      <button
+                        className="restock-delete-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeleteRestockAlertInfo({ isOpen: true, listId: list.id });
+                        }}
+                        title="Delete this restock list"
+                      >
+                        <IonIcon icon={trashOutline} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>
+
+          {showRestockDetail && (
+              <div className="modal-blur-overlay" onClick={() => setShowRestockDetail(null)}>
+                  <div className="m3-dialog-sheet" onClick={e => e.stopPropagation()}>
+                      <h2 style={{ fontWeight: 900, margin: '0 0 24px', fontSize: '1.8rem', textAlign: 'center', color: '#2D1B14' }}>
+                          Restock List for {new Date(showRestockDetail.createdAt).toLocaleDateString()}
+                      </h2>
+                      <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                          {showRestockDetail.items?.map((item, index) => (
+                              <div key={index} className="unit-manage-item" style={{display: 'flex', flexDirection: 'column', alignItems: 'flex-start'}}>
+                                  <div style={{width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                                      <span>{item.item_name}</span>
+                                      <span style={{
+                                        padding: '4px 8px',
+                                        borderRadius: '8px',
+                                        fontSize: '0.7rem',
+                                        fontWeight: '700',
+                                        textTransform: 'uppercase',
+                                        background: item.urgency === 'high' ? 'var(--m3-error-bg)' : item.urgency === 'medium' ? '#fffae6' : '#f0f4f0',
+                                        color: item.urgency === 'high' ? 'var(--m3-error)' : item.urgency === 'medium' ? '#f0ad4e' : '#5cb85c'
+                                      }}>{item.urgency}</span>
+                                  </div>
+                                  {item.notes && <p style={{margin: '8px 0 0', fontSize: '0.8rem', opacity: 0.7}}>{item.notes}</p>}
+                              </div>
+                          ))}
+                          {(!showRestockDetail.items || showRestockDetail.items.length === 0) && (
+                              <p style={{textAlign: 'center', opacity: 0.5}}>This list is empty.</p>
+                          )}
+                      </div>
+                      <button style={{ width: '100%', height: '56px', borderRadius: '18px', border: 'none', fontWeight: 900, background: '#2D1B14', color: 'white', marginTop: '24px' }} onClick={() => setShowRestockDetail(null)}>
+                          Close
+                      </button>
+                  </div>
+              </div>
+          )}
       </IonContent>
 
       <nav className="m3-footer-nav" style={{
@@ -727,6 +832,17 @@ const History: React.FC = () => {
         buttons={[
           { text: 'Cancel', role: 'cancel' },
           { text: 'Delete', handler: () => deleteDayLogs(deleteAlertInfo.date) }
+        ]}
+      />
+
+      <IonAlert
+        isOpen={deleteRestockAlertInfo.isOpen}
+        onDidDismiss={() => setDeleteRestockAlertInfo({ isOpen: false, listId: '' })}
+        header={'Delete Restock List?'}
+        message={'Are you sure you want to delete this restock list? This cannot be undone.'}
+        buttons={[
+          { text: 'Cancel', role: 'cancel' },
+          { text: 'Delete', handler: () => deleteRestockList(deleteRestockAlertInfo.listId) }
         ]}
       />
 

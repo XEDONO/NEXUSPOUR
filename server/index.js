@@ -1,299 +1,361 @@
 const express = require('express');
 const cors = require('cors');
 const db = require('./database');
+const { v4: uuidv4 } = require('uuid');
 
 const app = express();
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 
 app.use(cors());
 app.use(express.json());
 
+app.get('/api/health-check', (req, res) => {
+  res.send('Server is alive and running on MySQL!');
+});
+
 app.get('/', (req, res) => {
-  res.send('Server is running!');
+  res.send('NexusPour API is running!');
 });
 
 // Fridge Routes
-app.get('/api/fridges', (req, res) => {
-    const getFridges = db.prepare('SELECT * FROM fridges');
-    const fridges = getFridges.all();
-    res.json(fridges);
+app.get('/api/fridges', async (req, res) => {
+    try {
+        const [fridges] = await db.query('SELECT * FROM fridges');
+        res.json(fridges);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
 });
 
-app.post('/api/fridges', (req, res) => {
-    const { id, location, expectedMin, expectedMax } = req.body;
-    const addFridge = db.prepare('INSERT INTO fridges (id, location, expectedMin, expectedMax) VALUES (?, ?, ?, ?)');
-    const result = addFridge.run(id, location, expectedMin, expectedMax);
-    res.status(201).json({ id: result.lastInsertRowid });
+app.post('/api/fridges', async (req, res) => {
+    try {
+        const { id, location, expectedMin, expectedMax } = req.body;
+        await db.execute('INSERT INTO fridges (id, location, expectedMin, expectedMax) VALUES (?, ?, ?, ?)', [id, location, expectedMin, expectedMax]);
+        res.status(201).json({ id });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
 });
 
-app.delete('/api/fridges/:id', (req, res) => {
-    const deleteFridge = db.prepare('DELETE FROM fridges WHERE id = ?');
-    const result = deleteFridge.run(req.params.id);
-    if (result.changes) {
-        res.status(200).json({ message: 'Fridge deleted' });
-    } else {
-        res.status(404).json({ message: 'Fridge not found' });
+app.delete('/api/fridges/:id', async (req, res) => {
+    try {
+        const [result] = await db.execute('DELETE FROM fridges WHERE id = ?', [req.params.id]);
+        if (result.affectedRows) {
+            res.status(200).json({ message: 'Fridge deleted' });
+        } else {
+            res.status(404).json({ message: 'Fridge not found' });
+        }
+    } catch (error) {
+        res.status(500).json({ message: error.message });
     }
 });
 
 // TempLog Routes
-app.get('/api/logs', (req, res) => {
-    const getLogs = db.prepare('SELECT * FROM temp_logs');
-    const logs = getLogs.all();
-    res.json(logs);
-});
-
-app.post('/api/logs', (req, res) => {
-    const { date, fridge_id, reading, pass } = req.body;
-    const addLog = db.prepare('INSERT INTO temp_logs (date, fridge_id, reading, pass) VALUES (?, ?, ?, ?)');
-    const result = addLog.run(date, fridge_id, reading, pass ? 1 : 0);
-    res.status(201).json({ id: result.lastInsertRowid });
-});
-
-app.put('/api/logs', (req, res) => {
-    const { date, fridge_id, reading, pass } = req.body;
-    
-    const findLog = db.prepare('SELECT * FROM temp_logs WHERE date = ? AND fridge_id = ?');
-    const existingLog = findLog.get(date, fridge_id);
-
-    if (existingLog) {
-        const updateLog = db.prepare('UPDATE temp_logs SET reading = ?, pass = ? WHERE id = ?');
-        updateLog.run(reading, pass ? 1 : 0, existingLog.id);
-    } else {
-        const addLog = db.prepare('INSERT INTO temp_logs (date, fridge_id, reading, pass) VALUES (?, ?, ?, ?)');
-        addLog.run(date, fridge_id, reading, pass ? 1 : 0);
+app.get('/api/logs', async (req, res) => {
+    try {
+        const [logs] = await db.query('SELECT * FROM temp_logs');
+        res.json(logs);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
     }
-    res.status(200).json({ message: 'Log updated or created' });
 });
 
-app.delete('/api/logs/day/:date', (req, res) => {
-    const deleteDayLogs = db.prepare('DELETE FROM temp_logs WHERE date = ?');
-    const result = deleteDayLogs.run(req.params.date);
-    res.status(200).json({ message: `Deleted ${result.changes} logs for ${req.params.date}` });
+app.post('/api/logs', async (req, res) => {
+    try {
+        const { date, fridge_id, reading, pass } = req.body;
+        const [result] = await db.execute('INSERT INTO temp_logs (date, fridge_id, reading, pass) VALUES (?, ?, ?, ?)', [date, fridge_id, reading, pass ? 1 : 0]);
+        res.status(201).json({ id: result.insertId });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+});
+
+app.put('/api/logs', async (req, res) => {
+    try {
+        const { date, fridge_id, reading, pass } = req.body;
+        const [existing] = await db.query('SELECT * FROM temp_logs WHERE date = ? AND fridge_id = ?', [date, fridge_id]);
+
+        if (existing.length > 0) {
+            await db.execute('UPDATE temp_logs SET reading = ?, pass = ? WHERE id = ?', [reading, pass ? 1 : 0, existing[0].id]);
+        } else {
+            await db.execute('INSERT INTO temp_logs (date, fridge_id, reading, pass) VALUES (?, ?, ?, ?)', [date, fridge_id, reading, pass ? 1 : 0]);
+        }
+        res.status(200).json({ message: 'Log updated or created' });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+});
+
+app.delete('/api/logs/day/:date', async (req, res) => {
+    try {
+        const [result] = await db.execute('DELETE FROM temp_logs WHERE date = ?', [req.params.date]);
+        res.status(200).json({ message: `Deleted ${result.affectedRows} logs for ${req.params.date}` });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
 });
 
 // Checklist Routes
-app.get('/api/checklists', (req, res) => {
-    const getChecklists = db.prepare('SELECT * FROM checklists');
-    const checklists = getChecklists.all().map(task => ({
-        ...task,
-        completions: JSON.parse(task.completions || '{}')
-    }));
-    res.json(checklists);
-});
-
-app.post('/api/checklists', (req, res) => {
-    const { id, frequency, section, text, type } = req.body;
-    const addChecklist = db.prepare('INSERT INTO checklists (id, frequency, section, text, type, completions) VALUES (?, ?, ?, ?, ?, ?)');
-    const result = addChecklist.run(id, frequency, section, text, type || 'general', '{}');
-    res.status(201).json({ id: result.lastInsertRowid });
-});
-
-app.delete('/api/checklists/purge', (req, res) => {
-    const purgeChecklists = db.prepare('DELETE FROM checklists');
-    const result = purgeChecklists.run();
-    res.status(200).json({ message: `Purged ${result.changes} checklist tasks` });
-});
-
-app.delete('/api/checklists/clean-invalid', (req, res) => {
+app.get('/api/checklists', async (req, res) => {
     try {
-        const cleanChecklists = db.prepare('DELETE FROM checklists WHERE id IS NULL OR text IS NULL OR text = \'\'');
-        const result = cleanChecklists.run();
-        res.status(200).json({ message: `Removed ${result.changes} invalid checklist entries.` });
+        const [checklists] = await db.query('SELECT * FROM checklists');
+        const formatted = checklists.map(task => ({
+            ...task,
+            completions: JSON.parse(task.completions || '{}')
+        }));
+        res.json(formatted);
     } catch (error) {
-        res.status(500).json({ message: 'Failed to clean checklists.', error: error.message });
+        res.status(500).json({ message: error.message });
     }
 });
 
-app.delete('/api/checklists/:id', (req, res) => {
-    const deleteChecklist = db.prepare('DELETE FROM checklists WHERE id = ?');
-    const result = deleteChecklist.run(req.params.id);
-    if (result.changes) {
-        res.status(200).json({ message: 'Checklist deleted' });
-    } else {
-        res.status(404).json({ message: 'Checklist not found' });
+app.post('/api/checklists', async (req, res) => {
+    try {
+        const { id, frequency, section, text, type } = req.body;
+        await db.execute('INSERT INTO checklists (id, frequency, section, text, type, completions) VALUES (?, ?, ?, ?, ?, ?)',
+            [id, frequency, section, text, type || 'general', '{}']);
+        res.status(201).json({ id });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
     }
 });
 
-app.put('/api/checklists/:id/completion', (req, res) => {
-    const { dateKey, status } = req.body;
-    const getChecklist = db.prepare('SELECT * FROM checklists WHERE id = ?');
-    const task = getChecklist.get(req.params.id);
-
-    if (task) {
-        const completions = JSON.parse(task.completions || '{}');
-        completions[dateKey] = status;
-        const updateChecklist = db.prepare('UPDATE checklists SET completions = ? WHERE id = ?');
-        updateChecklist.run(JSON.stringify(completions), req.params.id);
-        res.status(200).json({ message: 'Completion updated' });
-    } else {
-        res.status(404).json({ message: 'Checklist not found' });
+app.delete('/api/checklists/purge', async (req, res) => {
+    try {
+        const [result] = await db.execute('DELETE FROM checklists');
+        res.status(200).json({ message: `Purged ${result.affectedRows} checklist tasks` });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
     }
 });
 
-// Checklist Log Routes
-app.get('/api/checklist-logs', (req, res) => {
-    const getLogs = db.prepare('SELECT * FROM checklist_logs');
-    const logs = getLogs.all();
-    res.json(logs);
+app.delete('/api/checklists/:id', async (req, res) => {
+    try {
+        const [result] = await db.execute('DELETE FROM checklists WHERE id = ?', [req.params.id]);
+        if (result.affectedRows) {
+            res.status(200).json({ message: 'Checklist deleted' });
+        } else {
+            res.status(404).json({ message: 'Checklist not found' });
+        }
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
 });
 
-app.post('/api/checklist-logs', (req, res) => {
-    const { date_range, type, total, completed, saved_at } = req.body;
-    const addLog = db.prepare('INSERT INTO checklist_logs (date_range, type, total, completed, saved_at) VALUES (?, ?, ?, ?, ?)');
-    const result = addLog.run(date_range, type, total, completed, saved_at);
-    res.status(201).json({ id: result.lastInsertRowid });
+app.put('/api/checklists/:id/completion', async (req, res) => {
+    try {
+        const { dateKey, status } = req.body;
+        const [tasks] = await db.query('SELECT * FROM checklists WHERE id = ?', [req.params.id]);
+
+        if (tasks.length > 0) {
+            const task = tasks[0];
+            const completions = JSON.parse(task.completions || '{}');
+            completions[dateKey] = status;
+            await db.execute('UPDATE checklists SET completions = ? WHERE id = ?', [JSON.stringify(completions), req.params.id]);
+            res.status(200).json({ message: 'Completion updated' });
+        } else {
+            res.status(404).json({ message: 'Checklist not found' });
+        }
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
 });
 
 // Inventory Routes
-app.get('/api/inventory', (req, res) => {
-    const getInventory = db.prepare('SELECT * FROM inventory');
-    const inventory = getInventory.all();
-    res.json(inventory);
-});
-
-app.post('/api/inventory', (req, res) => {
-    const { item, stock } = req.body;
-    const addInventory = db.prepare('INSERT INTO inventory (item, stock) VALUES (?, ?)');
-    const result = addInventory.run(item, stock);
-    res.status(201).json({ id: result.lastInsertRowid });
-});
-
-app.put('/api/inventory/:id', (req, res) => {
-    const { stock } = req.body;
-    const updateInventory = db.prepare('UPDATE inventory SET stock = ? WHERE id = ?');
-    const result = updateInventory.run(stock, req.params.id);
-    if (result.changes) {
-        res.status(200).json({ message: 'Inventory updated' });
-    } else {
-        res.status(404).json({ message: 'Inventory not found' });
+app.get('/api/inventory', async (req, res) => {
+    try {
+        const [inventory] = await db.query('SELECT * FROM inventory ORDER BY location, name');
+        res.json(inventory);
+    } catch (error) {
+        res.status(500).json({ message: 'Failed to retrieve inventory.', error: error.message });
     }
 });
 
-app.delete('/api/inventory/:id', (req, res) => {
-    const deleteInventory = db.prepare('DELETE FROM inventory WHERE id = ?');
-    const result = deleteInventory.run(req.params.id);
-    if (result.changes) {
-        res.status(200).json({ message: 'Inventory deleted' });
-    } else {
-        res.status(404).json({ message: 'Inventory not found' });
+app.post('/api/inventory', async (req, res) => {
+    try {
+        const { name, qty, unit, location, category, par } = req.body;
+        const id = uuidv4();
+        const lastUpdated = new Date().toISOString();
+        
+        await db.execute(
+            'INSERT INTO inventory (id, name, qty, unit, location, category, par, lastUpdated, restockCount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)',
+            [id, name, qty, unit, location, category, par, lastUpdated]
+        );
+
+        const [items] = await db.query('SELECT * FROM inventory WHERE id = ?', [id]);
+        res.status(201).json(items[0]);
+    } catch (error) {
+        res.status(500).json({ message: 'Failed to add inventory item.', error: error.message });
     }
 });
 
-// Inventory Log Routes
-app.get('/api/inventory-logs', (req, res) => {
-    const getLogs = db.prepare('SELECT * FROM inventory_logs');
-    const logs = getLogs.all();
-    res.json(logs);
+app.put('/api/inventory/:id', async (req, res) => {
+    try {
+        const { name, qty, unit, location, category, par } = req.body;
+        const lastUpdated = new Date().toISOString();
+        
+        const [result] = await db.execute(`
+            UPDATE inventory
+            SET name = COALESCE(?, name),
+                qty = COALESCE(?, qty),
+                unit = COALESCE(?, unit),
+                location = COALESCE(?, location),
+                category = COALESCE(?, category),
+                par = COALESCE(?, par),
+                lastUpdated = ?
+            WHERE id = ?
+        `, [name, qty, unit, location, category, par, lastUpdated, req.params.id]);
+        
+        if (result.affectedRows) {
+            const [items] = await db.query('SELECT * FROM inventory WHERE id = ?', [req.params.id]);
+            res.status(200).json(items[0]);
+        } else {
+            res.status(404).json({ message: 'Inventory item not found' });
+        }
+    } catch (error) {
+        res.status(500).json({ message: 'Failed to update inventory item.', error: error.message });
+    }
 });
 
-app.post('/api/inventory-logs', (req, res) => {
-    const { date, log_data } = req.body;
-    const addLog = db.prepare('INSERT INTO inventory_logs (date, log_data) VALUES (?, ?)');
-    const result = addLog.run(date, log_data);
-    res.status(201).json({ id: result.lastInsertRowid });
+app.delete('/api/inventory/:id', async (req, res) => {
+    try {
+        const [result] = await db.execute('DELETE FROM inventory WHERE id = ?', [req.params.id]);
+        if (result.affectedRows) {
+            res.status(200).json({ message: 'Inventory item deleted' });
+        } else {
+            res.status(404).json({ message: 'Inventory item not found' });
+        }
+    } catch (error) {
+        res.status(500).json({ message: 'Failed to delete inventory item.', error: error.message });
+    }
+});
+
+app.post('/api/inventory/bulk', async (req, res) => {
+    try {
+        const items = req.body;
+        if (!items || !Array.isArray(items)) {
+            return res.status(400).json({ message: 'Invalid request body, expected an array of items.' });
+        }
+
+        const newItemsResult = [];
+        for (const anItem of items) {
+            const id = uuidv4();
+            const lastUpdated = new Date().toISOString();
+            await db.execute(
+                'INSERT INTO inventory (id, name, qty, unit, location, category, par, lastUpdated, restockCount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)',
+                [id, anItem.name, anItem.qty || 0, anItem.unit || 'Units', anItem.location || 'Unassigned', anItem.category || 'General', anItem.par || 0, lastUpdated]
+            );
+            newItemsResult.push({ id, ...anItem, lastUpdated });
+        }
+        res.status(201).json(newItemsResult);
+    } catch (error) {
+        res.status(500).json({ message: 'Failed to bulk add inventory items.', error: error.message });
+    }
+});
+
+// Restock List Routes
+app.post('/api/restock-lists', async (req, res) => {
+    try {
+        const { items } = req.body;
+        if (!items || !Array.isArray(items) || items.length === 0) {
+            return res.status(400).json({ message: 'No items selected for restock list.' });
+        }
+
+        const listId = uuidv4();
+        const createdAt = new Date().toISOString();
+        
+        await db.execute('INSERT INTO restock_lists (id, createdAt) VALUES (?, ?)', [listId, createdAt]);
+
+        for (const item of items) {
+            const [invItems] = await db.query('SELECT name FROM inventory WHERE id = ?', [item.id]);
+            if (invItems.length > 0) {
+                await db.execute('INSERT INTO restock_list_items (restock_list_id, inventory_item_id, item_name, urgency, notes) VALUES (?, ?, ?, ?, ?)',
+                    [listId, item.id, invItems[0].name, item.urgency, item.notes]);
+                await db.execute('UPDATE inventory SET lastOrderedAt = ?, restockCount = restockCount + 1 WHERE id = ?', [createdAt, item.id]);
+            }
+        }
+
+        res.status(201).json({ id: listId, createdAt, itemCount: items.length });
+    } catch (error) {
+        res.status(500).json({ message: 'Failed to create restock list.', error: error.message });
+    }
+});
+
+app.get('/api/restock-lists', async (req, res) => {
+    try {
+        const [lists] = await db.query(`
+            SELECT 
+                rl.id, 
+                rl.createdAt,
+                (SELECT COUNT(*) FROM restock_list_items WHERE restock_list_id = rl.id) as itemCount
+            FROM restock_lists rl
+            ORDER BY rl.createdAt DESC
+        `);
+        res.json(lists);
+    } catch (error) {
+        res.status(500).json({ message: 'Failed to retrieve restock lists.', error: error.message });
+    }
+});
+
+app.get('/api/restock-lists/:id', async (req, res) => {
+    try {
+        const [items] = await db.query('SELECT item_name, urgency, notes FROM restock_list_items WHERE restock_list_id = ?', [req.params.id]);
+        const [lists] = await db.query('SELECT * FROM restock_lists WHERE id = ?', [req.params.id]);
+
+        if (lists.length > 0) {
+            res.json({ ...lists[0], items });
+        } else {
+            res.status(404).json({ message: 'Restock list not found.' });
+        }
+    } catch (error) {
+        res.status(500).json({ message: 'Failed to retrieve restock list details.', error: error.message });
+    }
+});
+
+app.delete('/api/restock-lists/:id', async (req, res) => {
+    try {
+        const listId = req.params.id;
+        await db.execute('DELETE FROM restock_list_items WHERE restock_list_id = ?', [listId]);
+        await db.execute('DELETE FROM restock_lists WHERE id = ?', [listId]);
+        res.status(200).json({ message: 'Restock list deleted successfully' });
+    } catch (error) {
+        res.status(500).json({ message: 'Failed to delete restock list.', error: error.message });
+    }
 });
 
 // Allergen Routes
-app.get('/api/allergens', (req, res) => {
-    const getAllergens = db.prepare('SELECT * FROM allergens');
-    const allergens = getAllergens.all();
-    res.json(allergens);
-});
-
-app.post('/api/allergens', (req, res) => {
-    const { dish, allergens } = req.body;
-    const addAllergen = db.prepare('INSERT INTO allergens (dish, allergens) VALUES (?, ?)');
-    const result = addAllergen.run(dish, allergens);
-    res.status(201).json({ id: result.lastInsertRowid });
-});
-
-app.delete('/api/allergens/:id', (req, res) => {
-    const deleteAllergen = db.prepare('DELETE FROM allergens WHERE id = ?');
-    const result = deleteAllergen.run(req.params.id);
-    if (result.changes) {
-        res.status(200).json({ message: 'Allergen deleted' });
-    } else {
-        res.status(404).json({ message: 'Allergen not found' });
+app.get('/api/allergens', async (req, res) => {
+    try {
+        const [allergens] = await db.query('SELECT * FROM allergens');
+        res.json(allergens);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
     }
 });
 
-// Section Routes
-app.get('/api/sections', (req, res) => {
-    const getSections = db.prepare('SELECT * FROM sections');
-    const sections = getSections.all();
-    res.json(sections.map(s => s.name));
-});
-
-app.post('/api/sections', (req, res) => {
-    const { sections } = req.body;
-    const deleteSections = db.prepare('DELETE FROM sections');
-    deleteSections.run();
-    const addSection = db.prepare('INSERT INTO sections (name) VALUES (?)');
-    const insert = db.transaction((secs) => {
-        for (const sec of secs) addSection.run(sec);
-    });
-    insert(sections);
-    res.status(201).json({ message: 'Sections updated' });
-});
-
-// Archive Routes
-app.get('/api/archives', (req, res) => {
-    const getArchives = db.prepare('SELECT * FROM archives');
-    const archives = getArchives.all();
-    res.json(archives);
-});
-
-app.post('/api/archives', (req, res) => {
-    const { name, data, date } = req.body;
-    const addArchive = db.prepare('INSERT INTO archives (name, data, date) VALUES (?, ?, ?)');
-    const result = addArchive.run(name, JSON.stringify(data), date);
-    res.status(201).json({ id: result.lastInsertRowid });
-});
-
-app.delete('/api/archives/:id', (req, res) => {
-    const deleteArchive = db.prepare('DELETE FROM archives WHERE id = ?');
-    const result = deleteArchive.run(req.params.id);
-    if (result.changes) {
-        res.status(200).json({ message: 'Archive deleted' });
-    } else {
-        res.status(404).json({ message: 'Archive not found' });
+app.post('/api/allergens', async (req, res) => {
+    try {
+        const { dish, allergens } = req.body;
+        const [result] = await db.execute('INSERT INTO allergens (dish, allergens) VALUES (?, ?)', [dish, allergens]);
+        res.status(201).json({ id: result.insertId, dish, allergens });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
     }
 });
 
-// Data-related routes
-app.get('/api/export', (req, res) => {
-    const tables = [
-        'temp_logs', 'checklists', 'checklist_logs', 'inventory', 'inventory_logs',
-        'sections', 'fridges', 'allergens'
-    ];
-    const data = {};
-    for (const table of tables) {
-        data[table] = db.prepare(`SELECT * FROM ${table}`).all();
-    }
-    res.json(data);
-});
-
-app.post('/api/import', (req, res) => {
-    const data = req.body;
-    const tables = Object.keys(data);
-    db.transaction(() => {
-        for (const table of tables) {
-            db.prepare(`DELETE FROM ${table}`).run();
-            const records = data[table];
-            if (!records.length) continue;
-            const columns = Object.keys(records[0]);
-            const placeholders = columns.map(() => '?').join(', ');
-            const stmt = db.prepare(`INSERT INTO ${table} (${columns.join(', ')}) VALUES (${placeholders})`);
-            for (const record of records) {
-                stmt.run(...Object.values(record));
-            }
+app.delete('/api/allergens/:id', async (req, res) => {
+    try {
+        const [result] = await db.execute('DELETE FROM allergens WHERE id = ?', [req.params.id]);
+        if (result.affectedRows) {
+            res.status(200).json({ message: 'Allergen deleted' });
+        } else {
+            res.status(404).json({ message: 'Allergen not found' });
         }
-    })();
-    res.status(200).json({ message: 'Data imported successfully' });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
 });
-
 
 app.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
+  console.log(`Server is running on port ${PORT}`);
 });

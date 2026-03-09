@@ -40,8 +40,7 @@ import {
   buildOutline
 } from 'ionicons/icons';
 import { useHistory } from 'react-router-dom';
-
-const API_BASE = 'http://localhost:3001/api';
+import { API_BASE_URL } from '../apiConfig';
 
 type CheckFrequency = 'daily' | 'weekly' | 'monthly';
 type TaskType = 'opening' | 'closing' | 'general';
@@ -79,7 +78,7 @@ const Checklist: React.FC = () => {
 
   const fetchData = async () => {
     try {
-      const res = await fetch(`${API_BASE}/checklists`);
+      const res = await fetch(`${API_BASE_URL}/checklists`);
       const data = await res.json();
       setTasks(data);
     } catch (error) {
@@ -105,7 +104,7 @@ const Checklist: React.FC = () => {
 
     const newStatus = !task.completions[currentKey];
 
-    await fetch(`${API_BASE}/checklists/${taskId}/completion`, {
+    await fetch(`${API_BASE_URL}/checklists/${taskId}/completion`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ dateKey: currentKey, status: newStatus }),
@@ -115,7 +114,7 @@ const Checklist: React.FC = () => {
 
   const removeTask = async (id: string) => {
     if (window.confirm('Delete this check permanently?')) {
-      await fetch(`${API_BASE}/checklists/${id}`, { method: 'DELETE' });
+      await fetch(`${API_BASE_URL}/checklists/${id}`, { method: 'DELETE' });
       fetchData();
     }
   };
@@ -130,7 +129,7 @@ const Checklist: React.FC = () => {
       text: addText.trim(),
     };
 
-    await fetch(`${API_BASE}/checklists`, {
+    await fetch(`${API_BASE_URL}/checklists`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newTask),
@@ -142,7 +141,7 @@ const Checklist: React.FC = () => {
   };
 
   const purgeAllChecklists = async () => {
-    await fetch(`${API_BASE}/checklists/purge`, { method: 'DELETE' });
+    await fetch(`${API_BASE_URL}/checklists/purge`, { method: 'DELETE' });
     setShowToast({ show: true, message: 'All checklists purged.', color: 'success' });
     fetchData();
     setShowAdminSidebar(false);

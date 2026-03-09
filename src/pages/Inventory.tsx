@@ -3,688 +3,741 @@ import {
   IonContent,
   IonPage,
   IonIcon,
+  IonCheckbox,
+  IonButton,
+  IonSelect,
+  IonSelectOption,
+  IonInput,
   IonAvatar,
-  IonBadge,
+  IonModal,
+  IonHeader,
+  IonToolbar,
+  IonTitle,
+  IonButtons,
+  IonItem,
+  IonLabel,
   IonRippleEffect,
-  IonProgressBar
+  IonToast
 } from '@ionic/react';
+import { useHistory } from 'react-router-dom';
+import { pdfToLines } from '../utils/pdf';
+import { parseStockPDFLines } from '../utils/pdfParsers';
+import { API_BASE_URL } from '../apiConfig';
 import {
+  checkmarkDoneCircleOutline, 
+  closeCircleOutline, 
+  printOutline, 
+  saveOutline, 
+  pencilOutline, 
+  listOutline,
   chevronBackOutline,
-  settingsOutline,
-  cafeOutline,
+  chevronDownOutline,
   albumsOutline,
+  cafeOutline,
+  cloudUploadOutline,
   home,
   thermometerOutline,
   clipboardOutline,
-  addOutline,
-  trashOutline,
-  removeOutline,
-  closeOutline,
-  calendarOutline,
-  timeOutline,
-  saveOutline,
   warningOutline,
-  checkmarkCircleOutline,
-  layersOutline,
-  cubeOutline,
-  statsChartOutline,
-  sparklesOutline,
-  searchOutline,
-  downloadOutline,
-  cloudUploadOutline,
-  filterOutline,
-  optionsOutline,
-  caretDownOutline,
-  caretForwardOutline,
-  alertCircleOutline
+  addCircleOutline,
+  trashOutline,
+  syncOutline
 } from 'ionicons/icons';
-import { useHistory } from 'react-router-dom';
-import { exportCSV } from '../utils/csv';
 
+
+// Type for a single inventory item from DB
 type StockItem = {
   id: string;
   name: string;
   qty: number;
   unit: string;
   location: string;
-  par: number; // Minimum stock level
+  par: number;
   category: string;
   lastUpdated: string;
+  lastOrderedAt?: string;
+  restockCount?: number;
+};
+
+// Type for an item that has been moved to the restock list
+type RestockListItem = {
+  id: string;
+  name: string;
+  urgency: 'high' | 'medium' | 'low';
+  notes: string;
 };
 
 const Inventory: React.FC = () => {
   const history = useHistory();
   const fileRef = useRef<HTMLInputElement | null>(null);
-  const [isLoaded, setIsLoaded] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filterStatus, setFilterStatus] = useState<'all' | 'low' | 'out'>('all');
-  const [showAdd, setShowAdd] = useState(false);
-  const [showAdminSidebar, setShowAdminSidebar] = useState(false);
-  const [collapsedSections, setCollapsedSections] = useState<string[]>([]);
-
-  // New Item State
-  const [addName, setAddName] = useState('');
-  const [addQty, setAddQty] = useState('');
-  const [addUnit, setAddUnit] = useState('Units');
-  const [addLocation, setAddLocation] = useState('Main Store');
-  const [addCategory, setAddCategory] = useState('General');
-  const [addPar, setAddPar] = useState('0');
-
-  const [items, setItems] = useState<StockItem[]>([]);
+  
+  // All inventory items from the database
+  const [inventoryItems, setInventoryItems] = useState<StockItem[]>([]);
+  // Local changes that haven't been saved yet
+  const [localChanges, setLocalChanges] = useState<Set<string>>(new Set());
+  // IDs of checked items in the main inventory list
+  const [selectedInventoryIds, setSelectedInventoryIds] = useState<Set<string>>(new Set());
+  // The items that have been moved to the restock list in Section 2
+  const [restockList, setRestockList] = useState<RestockListItem[]>([]);
+  
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [showToast, setShowToast] = useState({ show: false, message: '', color: 'success' });
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newItem, setNewItem] = useState({
+    name: '',
+    qty: 0,
+    unit: 'units',
+    location: '',
+    category: '',
+    par: 0,
+  });
 
   useEffect(() => {
-    const timer = setTimeout(() => setIsLoaded(true), 150);
-    fetch('http://localhost:3001/api/inventory')
-        .then(res => res.json())
-        .then(setItems)
-        .catch(console.error);
-    return () => clearTimeout(timer);
+    fetchInventory();
   }, []);
 
-  const filteredItems = useMemo(() => {
-    return items.filter(i => {
-      const matchesSearch = i.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                           i.location.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                           i.category.toLowerCase().includes(searchQuery.toLowerCase());
-
-      if (filterStatus === 'low') return matchesSearch && i.qty <= i.par && i.qty > 0;
-      if (filterStatus === 'out') return matchesSearch && i.qty <= 0;
-      return matchesSearch;
-    });
-  }, [items, searchQuery, filterStatus]);
-
-  const groupedItems = useMemo(() => {
-    const groups: Record<string, StockItem[]> = {};
-    filteredItems.forEach(item => {
-      const loc = item.location || 'Unassigned';
-      if (!groups[loc]) groups[loc] = [];
-      groups[loc].push(item);
-    });
-    return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
-  }, [filteredItems]);
-
-  const stats = useMemo(() => {
-    const total = items.length;
-    const low = items.filter(i => i.qty <= i.par && i.qty > 0).length;
-    const out = items.filter(i => i.qty <= 0).length;
-    const healthy = total - low - out;
-    const healthScore = total > 0 ? (healthy / total) * 100 : 100;
-    return { total, low, out, healthScore };
-  }, [items]);
-
-  const handleAddItem = () => {
-    if (!addName.trim()) return;
-    const newItem = {
-      name: addName.trim(),
-      qty: parseFloat(addQty) || 0,
-      unit: addUnit,
-      location: addLocation.trim() || 'Main Store',
-      category: addCategory.trim() || 'General',
-      par: parseFloat(addPar) || 0,
-      lastUpdated: new Date().toISOString()
-    };
-    
-    fetch('http://localhost:3001/api/inventory', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newItem)
-    })
-    .then(res => res.json())
-    .then(addedItem => {
-        setItems(prev => [addedItem, ...prev]);
-        setShowAdd(false);
-        resetAddForm();
-    })
-    .catch(console.error);
-  };
-
-  const resetAddForm = () => {
-    setAddName('');
-    setAddQty('');
-    setAddUnit('Units');
-    setAddLocation('Main Store');
-    setAddCategory('General');
-    setAddPar('0');
-  };
-
-  const adjustQty = (id: string, delta: number) => {
-    const item = items.find(i => i.id === id);
-    if (!item) return;
-
-    const newQty = Math.max(0, item.qty + delta);
-    
-    setItems(prev => prev.map(i =>
-      i.id === id ? { ...i, qty: newQty, lastUpdated: new Date().toISOString() } : i
-    ));
-
-    fetch(`http://localhost:3001/api/inventory/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stock: newQty })
-    }).catch(console.error);
-  };
-
-  const deleteItem = (id: string) => {
-    if (window.confirm('Permanently remove this item?')) {
-        fetch(`http://localhost:3001/api/inventory/${id}`, { method: 'DELETE' })
-        .then(res => {
-            if(res.ok) {
-                setItems(prev => prev.filter(i => i.id !== id));
-            }
+  const fetchInventory = () => {
+    setIsLoading(true);
+    fetch(`${API_BASE_URL}/inventory`)
+        .then(res => res.json())
+        .then(data => {
+            setInventoryItems(data);
+            setIsLoading(false);
         })
-        .catch(console.error);
+        .catch(err => {
+            console.error(err);
+            setIsLoading(false);
+        });
+  };
+  
+  const handleFileImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+        const lines = await pdfToLines(file);
+        const parsedItems = parseStockPDFLines(lines);
+        
+        const res = await fetch(`${API_BASE_URL}/inventory/bulk`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(parsedItems)
+        });
+
+        const responseText = await res.text();
+
+        if (!res.ok) {
+            let errorMsg = responseText;
+            try {
+                const errorBody = JSON.parse(responseText);
+                errorMsg = errorBody.message || responseText;
+            } catch (e) {
+                // Not JSON, use raw text
+            }
+            throw new Error(`Failed to import items: ${errorMsg}`);
+        }
+
+        const newItems = JSON.parse(responseText);
+        setInventoryItems(prev => [...prev, ...newItems]);
+        setShowToast({ show: true, message: `${newItems.length} items imported successfully!`, color: 'success' });
+
+    } catch (error: any) {
+        console.error('Error importing PDF:', error);
+        setShowToast({ show: true, message: `Import error: ${error.message}`, color: 'danger' });
+    } finally {
+        if(fileRef.current) {
+            fileRef.current.value = '';
+        }
     }
   };
 
-  const toggleSection = (section: string) => {
-    setCollapsedSections(prev =>
-      prev.includes(section) ? prev.filter(s => s !== section) : [...prev, section]
-    );
+  const handleSelectionChange = (itemId: string, isChecked: boolean) => {
+    const newSelection = new Set(selectedInventoryIds);
+    if (isChecked) {
+      newSelection.add(itemId);
+    } else {
+      newSelection.delete(itemId);
+    }
+    setSelectedInventoryIds(newSelection);
   };
 
-  const exportInventory = () => {
-    const header = ['ID', 'Name', 'Qty', 'Unit', 'Location', 'Category', 'Par Level', 'Last Updated'];
-    const rows = [header, ...items.map(i => [
-      String(i.id),
-      String(i.name),
-      String(i.qty),
-      String(i.unit),
-      String(i.location),
-      String(i.category),
-      String(i.par),
-      String(i.lastUpdated)
-    ])];
-    exportCSV(rows, `Inventory-Master-${new Date().toISOString().split('T')[0]}.csv`);
-    setShowAdminSidebar(false);
+  const handleQtyChange = (itemId: string, newQty: number) => {
+    setInventoryItems(prev => prev.map(item => item.id === itemId ? { ...item, qty: newQty } : item));
+    setLocalChanges(prev => new Set(prev).add(itemId));
   };
 
-  const saveAuditLog = () => {
-    const log = {
-      date: new Date().toLocaleDateString(),
-      log_data: JSON.stringify({
-        total: items.length,
-        lowStock: stats.low,
-        outOfStock: stats.out,
-      }),
-    };
+  const handleInventorySave = async () => {
+    if (localChanges.size === 0) return;
+    setIsSaving(true);
+    try {
+      const itemsToSave = inventoryItems.filter(item => localChanges.has(item.id));
+      const savePromises = itemsToSave.map(item =>
+        fetch(`${API_BASE_URL}/inventory/${item.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(item)
+        })
+      );
 
-    fetch('http://localhost:3001/api/inventory-logs', {
+      await Promise.all(savePromises);
+      setLocalChanges(new Set());
+      setShowToast({ show: true, message: 'All inventory changes saved permanently.', color: 'success' });
+    } catch (error) {
+      console.error('Save error:', error);
+      setShowToast({ show: true, message: 'Failed to save some changes.', color: 'danger' });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleMoveToRestock = () => {
+    const itemsToMove = inventoryItems
+      .filter(item => selectedInventoryIds.has(item.id))
+      .map(item => ({
+        id: item.id,
+        name: item.name,
+        urgency: 'medium' as 'medium',
+        notes: ''
+      }));
+    
+    const existingIds = new Set(restockList.map(item => item.id));
+    const filteredItemsToAdd = itemsToMove.filter(item => !existingIds.has(item.id));
+
+    setRestockList(prev => [...prev, ...filteredItemsToAdd]);
+    setSelectedInventoryIds(new Set());
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedInventoryIds.size === 0) return;
+
+    if (!window.confirm(`Are you sure you want to permanently delete ${selectedInventoryIds.size} items?`)) {
+      return;
+    }
+
+    try {
+      const idsToDelete = Array.from(selectedInventoryIds);
+      const deletePromises = idsToDelete.map(id =>
+        fetch(`${API_BASE_URL}/inventory/${id}`, {
+          method: 'DELETE'
+        })
+      );
+
+      await Promise.all(deletePromises);
+
+      setInventoryItems(prev => prev.filter(item => !selectedInventoryIds.has(item.id)));
+      setLocalChanges(prev => {
+        const next = new Set(prev);
+        selectedInventoryIds.forEach(id => next.delete(id));
+        return next;
+      });
+      setSelectedInventoryIds(new Set());
+      setShowToast({ show: true, message: 'Items deleted permanently.', color: 'success' });
+    } catch (error) {
+      console.error('Delete error:', error);
+      setShowToast({ show: true, message: 'Failed to delete some items.', color: 'danger' });
+    }
+  };
+
+  const handleUrgencyChange = (itemId: string, urgency: 'high' | 'medium' | 'low') => {
+    setRestockList(prev => prev.map(item => item.id === itemId ? { ...item, urgency } : item));
+  };
+  
+  const handleNotesChange = (itemId: string, notes: string) => {
+    setRestockList(prev => prev.map(item => item.id === itemId ? { ...item, notes } : item));
+  };
+  
+  const handleRemoveFromRestock = (itemId: string) => {
+    setRestockList(prev => prev.filter(item => item.id !== itemId));
+  };
+
+  const handleSaveRestockList = async () => {
+    if (restockList.length === 0) return;
+    
+    try {
+      const res = await fetch(`${API_BASE_URL}/restock-lists`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(log)
-    })
-    .then(() => alert('Current stock levels archived to History.'))
-    .catch(console.error);
+        body: JSON.stringify({ items: restockList })
+      });
+      if (!res.ok) throw new Error('Failed to save list');
+      
+      setShowToast({ show: true, message: 'Restock list saved to history!', color: 'success' });
+      setRestockList([]);
+      setTimeout(() => history.push('/history'), 1000);
+    } catch (error) {
+      console.error(error);
+      setShowToast({ show: true, message: 'Error saving restock list.', color: 'danger' });
+    }
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  const handleInputChange = (e: any) => {
+    const { name, value } = e.target;
+    setNewItem(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleAddItem = async () => {
+    if (!newItem.name) {
+      alert('Item name is required.');
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE_URL}/inventory`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newItem)
+      });
+      if (!res.ok) throw new Error('Failed to add item');
+      const addedItem = await res.json();
+      setInventoryItems(prev => [addedItem, ...prev]);
+      setShowAddModal(false);
+      setNewItem({ name: '', qty: 0, unit: 'units', location: '', category: '', par: 0 });
+      setShowToast({ show: true, message: 'New item added permanently!', color: 'success' });
+    } catch (error) {
+      console.error(error);
+      setShowToast({ show: true, message: 'Error adding item.', color: 'danger' });
+    }
   };
 
   return (
-    <IonPage className="inv-page-root">
+    <IonPage>
+        <input
+            type="file"
+            ref={fileRef}
+            style={{ display: 'none' }}
+            accept=".pdf"
+            onChange={handleFileImport}
+        />
       <style>{`
-        .inv-page-root {
+        :root {
           --m3-surface: #FDFCF4;
           --m3-primary: #2D1B14;
           --m3-accent: #D6E8B1;
-          --m3-warning: #FF9800;
-          --m3-error: #B3261E;
-          --m3-on-surface-variant: #8D6E63;
-          --m3-success: #2E7D32;
+          --m3-save: #4CAF50;
         }
-
-        .inv-page-root .inv-layout {
-          background-color: var(--m3-surface);
+        .inv-page-layout {
           display: flex;
           flex-direction: column;
-          height: 100vh;
-          overflow: hidden;
+          height: 100%;
+          background: var(--m3-surface);
         }
-
-        .inv-page-root .header-espresso {
-          background: #2D1B14;
-          padding: 24px 24px 40px;
+        .inv-header {
+          background: var(--m3-primary);
           color: white;
-          width: 100%;
-          position: relative;
-          flex-shrink: 0;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
+          padding: 24px;
           box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+          z-index: 10;
         }
-
-        .inv-page-root .liquid-wave {
-          position: absolute;
-          bottom: 0;
-          left: 0;
-          width: 100%;
-          height: 30px;
-          fill: var(--m3-surface);
-          pointer-events: none;
-        }
-
-        .inv-page-root .top-bar {
+        .inv-top-bar {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          width: 100%;
-          max-width: 1400px;
-          z-index: 10;
+          margin-bottom: 24px;
         }
-
-        .inv-page-root .brand-box {
-          display: flex;
-          align-items: center;
-          gap: 12px;
+        .inv-title-bar {
+            display: flex;
+            align-items: center;
+            gap: 16px;
         }
-
-        .inv-page-root .logo-icon {
-          background: linear-gradient(135deg, #E6BEAE 0%, #D7CCC8 100%);
-          width: 38px;
-          height: 38px;
-          border-radius: 10px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: #2D1B14;
-          box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-        }
-
-        .inv-page-root .main-scroll {
-          padding: 20px 20px 120px;
+        .inv-main-content {
           flex: 1;
-          width: 100%;
+          display: flex;
+          padding: 20px;
+          gap: 20px;
+          overflow: hidden;
+        }
+        .inventory-section {
+          flex: 1;
+          background: white;
+          border-radius: 24px;
+          box-shadow: 0 8px 30px rgba(0,0,0,0.08);
+          border: 1px solid #E1E3D3;
           display: flex;
           flex-direction: column;
+          overflow: hidden;
+        }
+        .section-header {
+          padding: 16px 20px;
+          border-bottom: 1px solid #E1E3D3;
+          display: flex;
           align-items: center;
-          overflow-y: auto;
+          gap: 8px;
+          background: #FDFCF4;
         }
-
-        .inv-page-root .grid-max {
-          width: 100%;
-          max-width: 1400px;
-        }
-
-        .inv-page-root .stats-summary {
-          display: flex;
-          gap: 12px;
-          margin-bottom: 24px;
-          width: 100%;
-        }
-
-        .inv-page-root .stat-card {
-          flex: 1;
-          background: white;
-          padding: 16px;
-          border-radius: 24px;
-          border: 1px solid #E1E3D3;
-          box-shadow: 0 4px 12px rgba(45, 27, 20, 0.04);
-        }
-
-        .inv-page-root .filter-tabs {
-          display: flex;
-          background: #F8F5F2;
-          padding: 4px;
-          border-radius: 16px;
-          margin-bottom: 20px;
-          border: 1px solid #E1E3D3;
-        }
-
-        .inv-page-root .filter-tab {
-          flex: 1;
-          padding: 10px;
-          border-radius: 12px;
-          border: none;
-          background: transparent;
+        .section-header h2 {
+          margin: 0;
+          font-size: 1.1rem;
           font-weight: 800;
-          font-size: 0.75rem;
-          color: #8D6E63;
-          text-transform: uppercase;
-          cursor: pointer;
-          transition: all 0.2s;
+          letter-spacing: 0.5px;
+          color: var(--m3-primary);
+          flex-grow: 1;
         }
-
-        .inv-page-root .filter-tab.active {
-          background: white;
-          color: #2D1B14;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        .item-list {
+          flex-grow: 1;
+          overflow-y: auto;
+          padding: 8px;
         }
-
-        .inv-page-root .search-bar {
-          background: white;
-          border-radius: 20px;
-          padding: 12px 18px;
-          margin-bottom: 24px;
-          box-shadow: 0 4px 15px rgba(45, 27, 20, 0.04);
+        .inventory-item, .restock-item {
+          display: flex;
+          padding: 10px 12px;
+          border-bottom: 1px solid #F5F5F5;
+          transition: background-color 0.2s;
+        }
+        .restock-item {
+          flex-direction: column;
+          align-items: stretch;
+          padding: 16px;
+          border-bottom: 1px solid #EAEAEA;
+        }
+        .inventory-item {
+          align-items: center;
+        }
+        .inventory-item:hover, .restock-item:hover {
+            background-color: #F8F5F2;
+        }
+        .inventory-item:last-child, .restock-item:last-child {
+          border-bottom: none;
+        }
+        .inventory-item ion-checkbox {
+          margin-right: 16px;
+        }
+        .inventory-item .item-name {
+          flex-grow: 1;
+          font-weight: 600;
+          color: #000;
+        }
+        .inventory-item .qty-input {
+          width: 80px;
+          --padding-start: 8px;
           border: 1px solid #E1E3D3;
-          display: flex;
-          align-items: center;
-          gap: 12px;
+          border-radius: 8px;
+          margin-left: 12px;
+          background: white;
+          --color: black;
+        }
+        .inventory-item.changed {
+          background-color: #FFF9C4;
         }
 
-        .inv-page-root .search-bar input { border: none; outline: none; flex: 1; font-weight: 700; color: #2D1B14; background: transparent; }
-
-        .inv-page-root .section-header {
+        .restock-item .item-main-info {
           display: flex;
+          justify-content: space-between;
           align-items: center;
-          gap: 10px;
-          margin: 24px 0 12px;
-          padding: 0 8px;
-          cursor: pointer;
+          margin-bottom: 12px;
         }
-
-        .inv-page-root .section-title {
-          font-weight: 900;
-          font-size: 0.85rem;
-          color: #8D6E63;
-          text-transform: uppercase;
-          letter-spacing: 1.5px;
+        .restock-item .item-name {
+          font-weight: 700;
+          font-size: 1.05rem;
+          color: #000;
+        }
+        .restock-item .item-controls {
+          display: flex;
+          gap: 16px;
+          align-items: flex-end;
+        }
+        .restock-item .control-group {
+          display: flex;
+          flex-direction: column;
           flex: 1;
         }
 
-        .inv-page-root .stock-item-row {
-          background: white;
-          border-radius: 20px;
-          padding: 16px;
-          margin-bottom: 8px;
+        .urgency-select {
+          --padding-start: 12px;
+          --padding-end: 12px;
           border: 1px solid #E1E3D3;
+          background: white;
+          border-radius: 8px;
+          width: 100%;
+          min-height: 48px;
+          font-size: 0.95rem;
+          --color: #000000 !important;
+          color: #000000 !important;
+        }
+        .urgency-select::part(text) { color: #000 !important; }
+
+        .restock-item .notes-input {
+          --background: white;
+          --padding-start: 12px;
+          border-radius: 8px;
+          border: 1px solid #E1E3D3;
+          font-size: 0.95rem;
+          flex: 1;
+          min-height: 48px;
+          --color: #000000;
+          color: #000000;
+        }
+
+        .restock-item .control-group ion-label {
+          font-size: 0.75rem;
+          font-weight: 700;
+          color: #555;
+          margin-bottom: 4px;
+          text-transform: uppercase;
+        }
+
+        .section-footer {
+          padding: 16px;
+          border-top: 1px solid #E1E3D3;
+          background: #FDFCF4;
           display: flex;
-          align-items: center;
-          gap: 16px;
-          transition: transform 0.2s;
+          gap: 12px;
+          justify-content: flex-end;
         }
 
-        .inv-page-root .stock-item-row.low { border-left: 6px solid var(--m3-warning); }
-        .inv-page-root .stock-item-row.out { border-left: 6px solid var(--m3-error); }
-
-        .inv-page-root .item-main { flex: 1; }
-        .inv-page-root .item-name { font-weight: 800; color: #2D1B14; margin-bottom: 2px; }
-        .inv-page-root .item-meta { font-size: 0.7rem; font-weight: 700; color: #A1887F; text-transform: uppercase; display: flex; gap: 8px; }
-
-        .inv-page-root .qty-box {
-          display: flex; align-items: center; gap: 8px; background: #F8F5F2;
-          padding: 4px; border-radius: 14px;
+        .btn-save-master {
+          --background: #4CAF50;
+          --color: white;
+          --box-shadow: 0 4px 10px rgba(76, 175, 80, 0.3);
+          font-weight: 800;
         }
 
-        .inv-page-root .qty-btn-sm {
-          width: 32px; height: 32px; border-radius: 10px; background: white;
-          border: none; color: #2D1B14; display: flex; align-items: center; justify-content: center;
-          cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        .m3-nav {
+          position: sticky;
+          bottom: 0;
+          height: 75px;
+          background: #FFFFFF;
+          display: flex;
+          border-top: 1px solid #E1E3D3;
+          z-index: 1000;
+          box-shadow: 0 -4px 20px rgba(0,0,0,0.05);
         }
-
-        .inv-page-root .qty-text { min-width: 36px; text-align: center; font-weight: 900; font-size: 1.1rem; }
-
-        .inv-page-root .fab-add {
-          position: fixed; bottom: 100px; right: 24px; width: 64px; height: 64px; border-radius: 22px;
-          background: #2D1B14; color: white; display: flex; align-items: center; justify-content: center;
-          box-shadow: 0 10px 30px rgba(45, 27, 20, 0.4); z-index: 1000; border: none;
-        }
-
-        .inv-page-root .m3-nav {
-          position: fixed; bottom: 0; left: 0; right: 0; height: 85px; background: #FFFFFF;
-          display: flex; border-top: 1px solid #E1E3D3; padding-bottom: env(safe-area-inset-bottom);
-          z-index: 1000; box-shadow: 0 -4px 20px rgba(0,0,0,0.05);
-        }
-
-        .inv-page-root .nav-tab { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #A1887F; font-size: 0.75rem; font-weight: 800; cursor: pointer; }
-        .inv-page-root .nav-tab.active { color: #2D1B14; }
-        .inv-page-root .nav-indicator { width: 64px; height: 32px; border-radius: 100px; display: flex; align-items: center; justify-content: center; transition: all 0.3s; margin-bottom: 4px; }
-        .inv-page-root .nav-tab.active .nav-indicator { background: #2D1B1412; transform: translateY(-2px); }
-
-        .inv-page-root .m3-modal-overlay {
-          position: fixed; inset: 0; background: rgba(45, 27, 20, 0.4); backdrop-filter: blur(8px);
-          z-index: 4000; display: flex; align-items: center; justify-content: center; padding: 24px;
-        }
-
-        .inv-page-root .m3-dialog {
-          background: white; border-radius: 32px; padding: 32px; width: 100%; max-width: 500px;
-          box-shadow: 0 20px 50px rgba(0,0,0,0.2); animation: inv-pop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.1);
-        }
-        @keyframes inv-pop { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-
-        .inv-page-root .m3-input-field {
-          width: 100%; padding: 16px; border-radius: 16px; background: #F8F5F2; border: 2px solid #E1E3D3;
-          font-weight: 700; color: #2D1B14; outline: none; margin-bottom: 12px;
-        }
-
-        .inv-page-root .sidebar-m3 {
-          position: fixed; top: 0; right: -100%; width: 100%; height: 100%; background: white;
-          z-index: 3000; transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1); padding: 24px;
-          display: flex; flex-direction: column; box-shadow: -15px 0 50px rgba(0,0,0,0.2);
-          transform: translateX(100%);
-        }
-        .inv-page-root .sidebar-m3.active { transform: translateX(0); }
+        .nav-tab { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #A1887F; font-size: 0.75rem; font-weight: 800; cursor: pointer; text-decoration: none; }
+        .nav-tab.active { color: #2D1B14; }
+        .nav-indicator { width: 64px; height: 32px; border-radius: 100px; display: flex; align-items: center; justify-content: center; transition: all 0.3s; margin-bottom: 4px; }
+        .nav-tab.active .nav-indicator { background: #2D1B1412; }
         
-        @media (min-width: 768px) {
-          .inv-page-root .sidebar-m3 {
-            width: 340px;
-            border-radius: 40px 0 0 40px;
-          }
+        @media (max-width: 800px) {
+            .inv-main-content {
+                flex-direction: column;
+                padding: 12px;
+                gap: 12px;
+                overflow-x: hidden;
+                overflow-y: auto;
+            }
+            .inventory-section {
+                height: auto;
+                min-height: 350px;
+            }
         }
 
-        .inv-page-root .scrim-m3 { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(8px); z-index: 2500; opacity: 0; pointer-events: none; transition: opacity 0.5s ease; }
-        .inv-page-root .scrim-m3.active { opacity: 1; pointer-events: auto; }
-        .inv-page-root .m3-card-wide { padding: 20px; border-radius: 20px; background: #F8F5F2; display: flex; align-items: center; gap: 15px; cursor: pointer; margin-bottom: 12px; transition: 0.2s; }
-        .inv-page-root .m3-card-wide:active { background: #E6E1DC; }
-
-        @media (max-width: 768px) {
-          .inv-page-root .main-scroll { padding: 16px 16px 120px; }
-          .inv-page-root .header-espresso { padding: 16px 16px 30px; }
-          .inv-page-root .stats-summary { flex-direction: column; }
-          .inv-page-root .search-bar { margin-bottom: 16px; padding: 8px 14px; }
-          .inv-page-root .filter-tabs { margin-bottom: 16px; }
-          .inv-page-root .stock-item-row { flex-wrap: wrap; }
-          .inv-page-root .qty-box { margin-top: 12px; width: 100%; justify-content: center; }
-          .inv-page-root .fab-add { width: 56px; height: 56px; border-radius: 18px; bottom: 90px; }
-          .inv-page-root .m3-dialog { padding: 24px; }
-          .inv-page-root .m3-dialog .flex { flex-direction: column; }
+        @media print {
+          body * { visibility: hidden; }
+          .print-area, .print-area * { visibility: visible; }
+          .print-area { position: absolute; left: 0; top: 0; width: 100%; }
+          .section-footer, .edit-controls, .m3-nav, .inv-header { display: none !important; }
         }
       `}</style>
-
-      <div className="inv-layout">
-        <header className="header-espresso">
-          <div className="top-bar">
-            <div className="brand-box" onClick={() => history.push('/dashboard')}>
-              <div className="logo-icon"><IonIcon icon={albumsOutline} /></div>
-              <h1 style={{ margin: 0, fontWeight: 900, fontSize: '1.6rem', letterSpacing: '-1px' }}>NexusPour</h1>
-            </div>
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-              <button className="round-btn" style={{ width: 40, height: 40, borderRadius: 12, border: 'none', background: 'rgba(255,255,255,0.1)', color: 'white' }} onClick={() => setShowAdminSidebar(true)}>
-                <IonIcon icon={settingsOutline} style={{ fontSize: '1.4rem' }} />
-              </button>
-              <IonAvatar style={{ width: '40px', height: '40px', border: '2px solid rgba(255,255,255,0.2)' }}>
-                <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Store" alt="User" />
-              </IonAvatar>
-            </div>
-          </div>
-
-          <div style={{ marginTop: '24px', width: '100%', maxWidth: '1400px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', zIndex: 10 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-              <button style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(255,255,255,0.1)', border: 'none', color: 'white' }} onClick={() => history.goBack()}>
-                <IonIcon icon={chevronBackOutline} style={{ fontSize: '1.4rem' }} />
-              </button>
-              <div>
-                <h2 style={{ margin: 0, fontWeight: 800, fontSize: '1.8rem' }}>Inventory</h2>
-                <div style={{ fontSize: '0.75rem', fontWeight: 700, opacity: 0.7, color: 'var(--m3-accent)' }}>Live Stock Monitor</div>
+      <div className="inv-page-layout">
+        <header className="inv-header">
+          <div className="inv-top-bar">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ background: 'linear-gradient(135deg, #E6BEAE 0%, #D7CCC8 100%)', width: '38px', height: '38px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 10px rgba(0,0,0,0.3)' }}>
+                  <IonIcon icon={cafeOutline} style={{ color: '#2D1B14', fontSize: '1.4rem' }} />
+                </div>
+                <span style={{ fontWeight: 900, fontSize: '1.4rem' }}>NexusPour</span>
               </div>
-            </div>
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: '0.65rem', fontWeight: 900, opacity: 0.6, letterSpacing: '1px' }}>STOCK HEALTH</div>
-              <div style={{ fontWeight: 900, fontSize: '1.4rem' }}>{Math.round(stats.healthScore)}%</div>
-            </div>
+            <IonAvatar style={{ width: '40px', height: '40px', border: '2px solid rgba(255,255,255,0.2)' }}>
+              <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Store" alt="User" />
+            </IonAvatar>
           </div>
-          <svg className="liquid-wave" viewBox="0 0 1440 120" preserveAspectRatio="none">
-            <path d="M0,32L60,42.7C120,53,240,75,360,74.7C480,75,600,53,720,48C840,43,960,53,1080,58.7C1200,64,1320,64,1380,64L1440,64L1440,120L1380,120C1320,120,1200,120,1080,120C960,120,840,120,720,120C600,120,480,120,360,120C240,120,120,120,60,120L0,120Z"></path>
-          </svg>
+          <div className="inv-title-bar">
+            <IonButton fill="clear" style={{color: 'white'}} onClick={() => history.push('/dashboard')}>
+              <IonIcon icon={chevronBackOutline} />
+            </IonButton>
+            <h1 style={{ margin: 0, fontSize: '1.8rem', fontWeight: 800 }}>Inventory & Restock</h1>
+            <IonButton fill="outline" color="light" style={{ marginLeft: 'auto' }} onClick={() => setShowAddModal(true)}>
+              <IonIcon icon={addCircleOutline} slot="start" />
+              Add Item
+            </IonButton>
+            <IonButton fill="outline" color="light" onClick={() => fileRef.current?.click()}>
+              <IonIcon icon={cloudUploadOutline} slot="start" />
+              Import PDF
+            </IonButton>
+          </div>
         </header>
 
-        <main className="main-scroll">
-          <div className="grid-max">
-            <div className="stats-summary">
-              <div className="stat-card" style={{ borderLeft: '6px solid var(--m3-primary)' }}>
-                <div style={{ fontSize: '0.65rem', fontWeight: 900, color: '#8D6E63' }}>TOTAL SKU</div>
-                <div style={{ fontSize: '1.5rem', fontWeight: 900 }}>{stats.total}</div>
-              </div>
-              <div className="stat-card" style={{ borderLeft: '6px solid var(--m3-warning)' }}>
-                <div style={{ fontSize: '0.65rem', fontWeight: 900, color: '#8D6E63' }}>LOW STOCK</div>
-                <div style={{ fontSize: '1.5rem', fontWeight: 900, color: stats.low > 0 ? 'var(--m3-warning)' : 'inherit' }}>{stats.low}</div>
-              </div>
-              <div className="stat-card" style={{ borderLeft: '6px solid var(--m3-error)' }}>
-                <div style={{ fontSize: '0.65rem', fontWeight: 900, color: '#8D6E63' }}>OUT OF STOCK</div>
-                <div style={{ fontSize: '1.5rem', fontWeight: 900, color: stats.out > 0 ? 'var(--m3-error)' : 'inherit' }}>{stats.out}</div>
-              </div>
+        <main className="inv-main-content">
+          {/* Section 1: Full Inventory */}
+          <div className="inventory-section">
+            <div className="section-header">
+              <IonIcon icon={listOutline} />
+              <h2>Master Inventory</h2>
+              <IonButton 
+                color="danger"
+                fill="outline"
+                onClick={handleDeleteSelected}
+                disabled={selectedInventoryIds.size === 0}>
+                <IonIcon icon={trashOutline} slot="icon-only" />
+              </IonButton>
+              {localChanges.size > 0 && (
+                <IonButton
+                  className="btn-save-master"
+                  onClick={handleInventorySave}
+                  disabled={isSaving}>
+                  <IonIcon icon={saveOutline} slot="start" />
+                  Save {localChanges.size} Changes
+                </IonButton>
+              )}
+              <IonButton
+                onClick={handleMoveToRestock} 
+                disabled={selectedInventoryIds.size === 0}>
+                Add to Restock &rarr;
+              </IonButton>
             </div>
-
-            <div className="search-bar">
-              <IonIcon icon={searchOutline} style={{ color: '#8D6E63', fontSize: '1.2rem' }} />
-              <input placeholder="Search by name, location or category..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
-            </div>
-
-            <div className="filter-tabs">
-              <button className={`filter-tab ${filterStatus === 'all' ? 'active' : ''}`} onClick={() => setFilterStatus('all')}>All Items</button>
-              <button className={`filter-tab ${filterStatus === 'low' ? 'active' : ''}`} onClick={() => setFilterStatus('low')}>Low Stock</button>
-              <button className={`filter-tab ${filterStatus === 'out' ? 'active' : ''}`} onClick={() => setFilterStatus('out')}>Out</button>
-            </div>
-
-            {groupedItems.map(([location, sectionItems]) => {
-              const isCollapsed = collapsedSections.includes(location);
-              return (
-                <section key={location}>
-                  <div className="section-header" onClick={() => toggleSection(location)}>
-                    <IonIcon icon={isCollapsed ? caretForwardOutline : caretDownOutline} style={{ color: '#8D6E63' }} />
-                    <span className="section-title">{location}</span>
-                    <IonBadge style={{ background: '#F8F5F2', color: '#8D6E63', borderRadius: '8px' }}>{sectionItems.length}</IonBadge>
+            <div className="item-list">
+              {isLoading ? <p style={{textAlign: 'center', padding: '20px'}}>Loading...</p> : inventoryItems.map(item => (
+                <div className={`inventory-item ${localChanges.has(item.id) ? 'changed' : ''}`} key={item.id}>
+                  <IonCheckbox
+                    value={item.id}
+                    checked={selectedInventoryIds.has(item.id)}
+                    onIonChange={e => handleSelectionChange(item.id, e.detail.checked)}
+                  />
+                  <span className="item-name">{item.name}</span>
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <IonLabel style={{fontSize: '0.75rem', opacity: 0.6}}>Qty:</IonLabel>
+                    <IonInput
+                      type="number"
+                      className="qty-input"
+                      value={item.qty}
+                      onIonChange={e => handleQtyChange(item.id, parseInt(e.detail.value || '0'))}
+                    />
                   </div>
+                </div>
+              ))}
+            </div>
+          </div>
 
-                  {!isCollapsed && sectionItems.map(item => {
-                    const isLow = item.qty <= item.par && item.qty > 0;
-                    const isOut = item.qty <= 0;
-                    return (
-                      <div key={item.id} className={`stock-item-row ${isLow ? 'low' : isOut ? 'out' : ''}`}>
-                        <div className="item-main">
-                          <div className="item-name">{item.name}</div>
-                          <div className="item-meta">
-                            <span>{item.category}</span>
-                            <span>•</span>
-                            <span style={{ color: isLow || isOut ? 'inherit' : '#2E7D32' }}>Par: {item.par} {item.unit}</span>
-                          </div>
-                        </div>
-
-                        <div className="qty-box">
-                          <button className="qty-btn-sm" onClick={() => adjustQty(item.id, -1)}><IonIcon icon={removeOutline} /></button>
-                          <div className="qty-text" style={{ color: isOut ? 'var(--m3-error)' : isLow ? 'var(--m3-warning)' : 'inherit' }}>{item.qty}</div>
-                          <button className="qty-btn-sm" onClick={() => adjustQty(item.id, 1)}><IonIcon icon={addOutline} /></button>
-                        </div>
-
-                        <button style={{ background: 'none', border: 'none', color: '#E1E3D3', padding: '8px' }} onClick={() => deleteItem(item.id)}>
-                          <IonIcon icon={trashOutline} />
-                        </button>
-                      </div>
-                    );
-                  })}
-                </section>
-              );
-            })}
-
-            {items.length === 0 && (
-              <div style={{ textAlign: 'center', padding: '80px 20px', opacity: 0.4 }}>
-                <IonIcon icon={sparklesOutline} style={{ fontSize: '4rem' }} />
-                <p style={{ fontWeight: 700, marginTop: '16px' }}>Ready to organize? Add your first item.</p>
+          {/* Section 2: Restock List */}
+          <div className="inventory-section print-area">
+            <div className="section-header">
+              <IonIcon icon={checkmarkDoneCircleOutline} />
+              <h2>New Restock List</h2>
+            </div>
+            <div className="item-list">
+              {restockList.length === 0 ? <p style={{textAlign: 'center', padding: '20px', color: '#888'}}>Items to restock appear here.</p> : restockList.map(item => (
+                <div className="restock-item" key={item.id}>
+                  <div className="item-main-info">
+                    <span className="item-name">{item.name}</span>
+                    <IonButton fill="clear" color="danger" size="small" onClick={() => handleRemoveFromRestock(item.id)}>
+                      <IonIcon slot="icon-only" icon={closeCircleOutline} />
+                    </IonButton>
+                  </div>
+                  <div className="item-controls">
+                    <div className="control-group">
+                      <IonLabel>Urgency</IonLabel>
+                      <IonSelect
+                        className="urgency-select"
+                        value={item.urgency}
+                        placeholder="Select"
+                        onIonChange={e => handleUrgencyChange(item.id, e.detail.value)}
+                        interface="popover"
+                        toggleIcon={chevronDownOutline}
+                      >
+                        <IonSelectOption value="high">High</IonSelectOption>
+                        <IonSelectOption value="medium">Medium</IonSelectOption>
+                        <IonSelectOption value="low">Low</IonSelectOption>
+                      </IonSelect>
+                    </div>
+                    <div className="control-group" style={{flex: 2}}>
+                      <IonLabel>Notes</IonLabel>
+                      <IonInput
+                        className="notes-input"
+                        value={item.notes}
+                        onIonChange={e => handleNotesChange(item.id, e.detail.value!)}
+                        placeholder="Add any details..."
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {restockList.length > 0 && (
+              <div className="section-footer">
+                <IonButton onClick={handleSaveRestockList}><IonIcon icon={saveOutline} slot="start" />Save List</IonButton>
+                <IonButton onClick={handlePrint} color="medium"><IonIcon icon={printOutline} slot="start" />Print</IonButton>
               </div>
             )}
           </div>
         </main>
-
-        <button className="fab-add ion-activatable" onClick={() => setShowAdd(true)}>
-          <IonIcon icon={addOutline} style={{ fontSize: '2.4rem' }} />
-          <IonRippleEffect />
-        </button>
-
+        
         <nav className="m3-nav">
           <div className="nav-tab" onClick={() => history.push('/dashboard')}>
-            <div className="nav-indicator"><IonIcon icon={home} style={{ fontSize: '1.5rem' }} /></div>
+            <div className="nav-indicator"><IonIcon icon={home} /></div>
             <span>Home</span>
           </div>
           <div className="nav-tab" onClick={() => history.push('/temp-check')}>
-            <div className="nav-indicator"><IonIcon icon={thermometerOutline} style={{ fontSize: '1.5rem' }} /></div>
+            <div className="nav-indicator"><IonIcon icon={thermometerOutline} /></div>
             <span>Temps</span>
           </div>
           <div className="nav-tab" onClick={() => history.push('/checklist')}>
-            <div className="nav-indicator"><IonIcon icon={clipboardOutline} style={{ fontSize: '1.5rem' }} /></div>
+            <div className="nav-indicator"><IonIcon icon={clipboardOutline} /></div>
             <span>Checks</span>
           </div>
           <div className="nav-tab active">
-            <div className="nav-indicator"><IonIcon icon={albumsOutline} style={{ fontSize: '1.5rem' }} /></div>
+            <div className="nav-indicator"><IonIcon icon={albumsOutline} /></div>
             <span>Stock</span>
           </div>
           <div className="nav-tab" onClick={() => history.push('/allergens')}>
-            <div className="nav-indicator"><IonIcon icon={warningOutline} style={{ fontSize: '1.5rem' }} /></div>
+            <div className="nav-indicator"><IonIcon icon={warningOutline} /></div>
             <span>Allergens</span>
           </div>
         </nav>
-
-        <div className={`scrim-m3 ${showAdminSidebar ? 'active' : ''}`} onClick={() => setShowAdminSidebar(false)} />
-        <aside className={`sidebar-m3 ${showAdminSidebar ? 'active' : ''}`}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px' }}>
-            <h2 style={{ fontWeight: 900, margin: 0, fontSize: '1.8rem', color: '#2D1B14' }}>Inventory Tools</h2>
-            <button className="round-btn" style={{ background: '#F8F5F2', color: '#2D1B14', border: 'none', width: 40, height: 40, borderRadius: 12 }} onClick={() => setShowAdminSidebar(false)}>
-              <IonIcon icon={closeOutline} style={{ fontSize: '2rem' }} />
-            </button>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <div className="m3-card-wide" onClick={() => { history.push('/history'); setShowAdminSidebar(false); }}>
-              <IonIcon icon={timeOutline} style={{ fontSize: '1.8rem', color: '#2D1B14' }} />
-              <span style={{ fontWeight: 800 }}>Audit History</span>
-            </div>
-            <div className="m3-card-wide" onClick={saveAuditLog}>
-              <IonIcon icon={saveOutline} style={{ fontSize: '1.8rem', color: '#2D1B14' }} />
-              <span style={{ fontWeight: 800 }}>Archive Current Levels</span>
-            </div>
-            <div className="m3-card-wide" onClick={exportInventory}>
-              <IonIcon icon={downloadOutline} style={{ fontSize: '1.8rem', color: '#2D1B14' }} />
-              <span style={{ fontWeight: 800 }}>Export Master List (CSV)</span>
-            </div>
-            <div className="m3-card-wide" style={{ marginTop: '24px' }} onClick={() => { if(confirm('Clear all stock data?')) { setItems([]); setShowAdminSidebar(false); } }}>
-              <IonIcon icon={trashOutline} style={{ fontSize: '1.8rem', color: 'var(--m3-error)' }} />
-              <span style={{ fontWeight: 800, color: 'var(--m3-error)' }}>Wipe Inventory</span>
-            </div>
-          </div>
-        </aside>
-
-        {showAdd && (
-          <div className="m3-modal-overlay" onClick={() => setShowAdd(false)}>
-            <div className="m3-dialog" onClick={e => e.stopPropagation()}>
-              <header style={{ textAlign: 'center', marginBottom: '24px' }}>
-                <div style={{ width: '56px', height: '56px', background: '#F8F5F2', borderRadius: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', color: '#2D1B14' }}>
-                  <IonIcon icon={addOutline} style={{ fontSize: '1.8rem' }} />
-                </div>
-                <h3 style={{ margin: 0, fontWeight: 900, color: '#2D1B14', fontSize: '1.6rem' }}>Add New Stock</h3>
-              </header>
-
-              <div className="flex flex-col gap-1">
-                <input className="m3-input-field" placeholder="Item Name (e.g. Arabica Beans)" value={addName} onChange={e => setAddName(e.target.value)} autoFocus />
-                <div className="flex flex-col md:flex-row gap-3">
-                  <input className="m3-input-field" style={{ flex: 1 }} type="number" placeholder="Initial Qty" value={addQty} onChange={e => setAddQty(e.target.value)} />
-                  <select className="m3-input-field" style={{ flex: 1 }} value={addUnit} onChange={e => setAddUnit(e.target.value)}>
-                    <option>Units</option><option>Liters</option><option>KG</option><option>Grams</option><option>Cases</option><option>Packs</option>
-                  </select>
-                </div>
-                <div className="flex flex-col md:flex-row gap-3">
-                  <input className="m3-input-field" style={{ flex: 1 }} placeholder="Location (e.g. Fridge 1)" value={addLocation} onChange={e => setAddLocation(e.target.value)} />
-                  <input className="m3-input-field" style={{ flex: 1 }} placeholder="Category (e.g. Dairy)" value={addCategory} onChange={e => setAddCategory(e.target.value)} />
-                </div>
-                <input className="m3-input-field" type="number" placeholder="Par Level (Min Stock to trigger alert)" value={addPar} onChange={e => setAddPar(e.target.value)} />
-              </div>
-
-              <div className="flex flex-col-reverse md:flex-row gap-3 mt-6">
-                <button onClick={() => setShowAdd(false)} style={{ flex: 1, padding: 18, fontWeight: 800, color: '#8D6E63', border: 'none', background: 'none' }}>CANCEL</button>
-                <button onClick={handleAddItem} style={{ flex: 1.5, padding: 18, borderRadius: 20, background: '#2D1B14', color: 'white', fontWeight: 900, boxShadow: '0 8px 20px rgba(45, 27, 20, 0.3)' }}>CREATE ITEM</button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
+
+      <IonModal isOpen={showAddModal} onDidDismiss={() => setShowAddModal(false)}>
+        <IonHeader>
+          <IonToolbar>
+            <IonTitle>Add New Inventory Item</IonTitle>
+            <IonButtons slot="end">
+              <IonButton onClick={() => setShowAddModal(false)}>Close</IonButton>
+            </IonButtons>
+          </IonToolbar>
+        </IonHeader>
+        <IonContent className="ion-padding">
+          <IonItem>
+            <IonLabel position="stacked">Item Name</IonLabel>
+            <IonInput name="name" value={newItem.name} onIonChange={handleInputChange} />
+          </IonItem>
+          <IonItem>
+            <IonLabel position="stacked">Quantity</IonLabel>
+            <IonInput name="qty" type="number" value={newItem.qty} onIonChange={handleInputChange} />
+          </IonItem>
+          <IonItem>
+            <IonLabel position="stacked">Unit</IonLabel>
+            <IonInput name="unit" value={newItem.unit} onIonChange={handleInputChange} />
+          </IonItem>
+          <IonItem>
+            <IonLabel position="stacked">Location</IonLabel>
+            <IonInput name="location" value={newItem.location} onIonChange={handleInputChange} />
+          </IonItem>
+          <IonItem>
+            <IonLabel position="stacked">Category</IonLabel>
+            <IonInput name="category" value={newItem.category} onIonChange={handleInputChange} />
+          </IonItem>
+          <IonItem>
+            <IonLabel position="stacked">Par Level</IonLabel>
+            <IonInput name="par" type="number" value={newItem.par} onIonChange={handleInputChange} />
+          </IonItem>
+          <IonButton expand="block" onClick={handleAddItem} style={{ marginTop: '20px' }}>
+            Add Item
+          </IonButton>
+        </IonContent>
+      </IonModal>
+
+      <IonToast
+        isOpen={showToast.show}
+        onDidDismiss={() => setShowToast({ ...showToast, show: false })}
+        message={showToast.message}
+        duration={3000}
+        color={showToast.color}
+        position="bottom"
+      />
     </IonPage>
   );
 };
 
 export default Inventory;
-

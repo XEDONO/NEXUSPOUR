@@ -36,8 +36,7 @@ import {
   checkmarkDoneOutline
 } from 'ionicons/icons';
 import { useHistory } from 'react-router-dom';
-
-const API_BASE = 'http://localhost:3001/api';
+import { API_BASE_URL } from '../apiConfig';
 
 type FridgeTemplate = { id: string; location: string; expectedMin: number; expectedMax: number };
 
@@ -97,11 +96,11 @@ const TempCheck: React.FC = () => {
 
   const fetchData = async () => {
     try {
-      const fridgesRes = await fetch(`${API_BASE}/fridges`);
+      const fridgesRes = await fetch(`${API_BASE_URL}/fridges`);
       const fridgesData = await fridgesRes.json();
       setMasterFridges(fridgesData);
 
-      const logsRes = await fetch(`${API_BASE}/logs`);
+      const logsRes = await fetch(`${API_BASE_URL}/logs`);
       const logsData = await logsRes.json();
 
       const dailyLogs = logsData.reduce((acc: DailyLog[], log: any) => {
@@ -140,7 +139,7 @@ const TempCheck: React.FC = () => {
     const temp = parseFloat(value);
     const pass = !isNaN(temp) && temp >= fridge.expectedMin && temp <= fridge.expectedMax;
 
-    await fetch(`${API_BASE}/logs`, {
+    await fetch(`${API_BASE_URL}/logs`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ date, fridge_id: fridgeId, reading: value, pass }),
@@ -198,7 +197,7 @@ const TempCheck: React.FC = () => {
       expectedMax: maxTemp
     };
 
-    await fetch(`${API_BASE}/fridges`, {
+    await fetch(`${API_BASE_URL}/fridges`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newFridge),
@@ -211,7 +210,7 @@ const TempCheck: React.FC = () => {
 
   const deleteFridge = async (id: string) => {
     if (window.confirm('Delete this unit? All historical readings for this unit in the table view will be hidden.')) {
-      await fetch(`${API_BASE}/fridges/${id}`, {
+      await fetch(`${API_BASE_URL}/fridges/${id}`, {
           method: 'DELETE',
       });
       fetchData();
@@ -228,7 +227,8 @@ const TempCheck: React.FC = () => {
   const progress = totalCount > 0 ? recordedCount / totalCount : 0;
 
   return (
-    <IonPage className="tc-page-root">
+    <IonPage>
+      {/* ... style content omitted for brevity, same as original ... */}
       <style>{`
         .tc-page-root {
           --m3-surface: #FDFCF4;
@@ -351,7 +351,7 @@ const TempCheck: React.FC = () => {
         .tc-page-root .cell-input-m3:focus { background: #F3F4E9; box-shadow: inset 0 0 0 2px var(--m3-accent); }
 
         .tc-page-root .m3-footer-nav { background: #ffffff; height: 75px; display: flex; border-top: 1px solid #E1E3D3; padding-bottom: env(safe-area-inset-bottom); box-shadow: 0 -4px 15px rgba(0,0,0,0.04); width: 100%; justify-content: space-around; position: fixed; bottom: 0; left: 0; right: 0; z-index: 1000; }
-        .tc-page-root .nav-link-m3 { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #A1887F; font-size: 0.7rem; font-weight: 800; text-decoration: none; cursor: pointer; }
+        .tc-page-root .nav-link-m3 { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #A1887F; font-size: 0.75rem; font-weight: 800; text-decoration: none; cursor: pointer; }
         .tc-page-root .nav-link-m3.active { color: #2D1B14; }
         .tc-page-root .nav-pill-m3 { padding: 4px 24px; border-radius: 100px; display: flex; align-items: center; justify-content: center; transition: all 0.3s ease; margin-bottom: 2px; width: 64px; height: 32px; }
         .tc-page-root .nav-link-m3.active .nav-pill-m3 { background: #2D1B1412; transform: translateY(-2px); }
@@ -372,7 +372,7 @@ const TempCheck: React.FC = () => {
         .tc-page-root .delete-btn-m3 { color: var(--m3-error); font-size: 1.3rem; background: none; border: none; cursor: pointer; }
       `}</style>
 
-      <IonContent scrollY={false}>
+      <IonContent scrollY={false} className="tc-page-root">
         <div className="temp-main-view">
           <header className="header-espresso-splash">
             <div className="top-bar-nav">
@@ -443,13 +443,15 @@ const TempCheck: React.FC = () => {
         <div className="fab-menu-container">
           {showFabMenu && (
             <>
-              <button className="fab-action-m3" onClick={fetchData} aria-label="Refresh Data"><IonIcon icon={refreshOutline} /></button>
               <button className="fab-action-m3" onClick={saveToHistory} aria-label="Save to History"><IonIcon icon={saveOutline} /></button>
               <button className="fab-action-m3" onClick={() => {setShowAddFridgeModal(true); setShowFabMenu(false);}} aria-label="Add Unit"><IonIcon icon={addOutline} /></button>
               <button className="fab-action-m3" onClick={() => {setShowManageUnitsModal(true); setShowFabMenu(false);}} aria-label="Manage Units"><IonIcon icon={constructOutline} /></button>
             </>
           )}
-          <button className="fab-main-m3" onClick={() => setShowFabMenu(!showFabMenu)}><IonIcon icon={showFabMenu ? closeOutline : settingsOutline} /><IonRippleEffect /></button>
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <button className="fab-main-m3" onClick={fetchData} aria-label="Refresh Data"><IonIcon icon={refreshOutline} /></button>
+            <button className="fab-main-m3" onClick={() => setShowFabMenu(!showFabMenu)}><IonIcon icon={showFabMenu ? closeOutline : settingsOutline} /><IonRippleEffect /></button>
+          </div>
         </div>
       </IonContent>
       

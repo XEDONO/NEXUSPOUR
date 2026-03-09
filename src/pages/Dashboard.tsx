@@ -30,6 +30,7 @@ import {
 } from 'ionicons/icons';
 import { useHistory } from 'react-router-dom';
 import JSZip from 'jszip';
+import { API_BASE_URL } from '../apiConfig';
 
 const Dashboard: React.FC = () => {
   const history = useHistory();
@@ -45,7 +46,7 @@ const Dashboard: React.FC = () => {
   const [archivedFiles, setArchivedFiles] = useState<{name: string, data: any, date: string}[]>([]);
 
   useEffect(() => {
-    fetch('/api/archives')
+    fetch(`${API_BASE_URL}/archives`)
       .then(res => res.json())
       .then(setArchivedFiles)
       .catch(err => console.error("Failed to fetch archives", err));
@@ -58,7 +59,7 @@ const Dashboard: React.FC = () => {
 
   const saveToArchive = (name: string, data: any) => {
     const newArchive = { name, data, date: new Date().toLocaleString() };
-    fetch('/api/archives', {
+    fetch(`${API_BASE_URL}/archives`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newArchive)
@@ -69,7 +70,7 @@ const Dashboard: React.FC = () => {
   };
 
   const restoreFromArchive = (archive: any) => {
-    fetch('/api/import', {
+    fetch(`${API_BASE_URL}/import`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(archive.data)
@@ -84,7 +85,7 @@ const Dashboard: React.FC = () => {
   const deleteArchive = (index: number) => {
     const archive = archivedFiles[index];
     if (window.confirm('Delete this backup?')) {
-      fetch(`/api/archives/${(archive as any).id}`, { method: 'DELETE' })
+      fetch(`${API_BASE_URL}/archives/${(archive as any).id}`, { method: 'DELETE' })
       .then(() => setArchivedFiles(prev => prev.filter((_, i) => i !== index)))
       .catch(err => console.error("Failed to delete archive", err));
     }
@@ -92,7 +93,7 @@ const Dashboard: React.FC = () => {
 
   const exportData = async (format: 'json' | 'zip') => {
     try {
-      const res = await fetch('/api/export');
+      const res = await fetch(`${API_BASE_URL}/export`);
       const data = await res.json();
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
       const jsonStr = JSON.stringify(data, null, 2);
@@ -130,7 +131,7 @@ const Dashboard: React.FC = () => {
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      await fetch('/api/import', {
+      await fetch(`${API_BASE_URL}/import`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
@@ -202,8 +203,7 @@ const Dashboard: React.FC = () => {
 
         .logo-wrap {
           display: flex;
-          align-items: center;
-          gap: 16px;
+          align-items: center; gap: 16px;
         }
 
         .logo-icon-box {
@@ -211,11 +211,8 @@ const Dashboard: React.FC = () => {
           width: 52px;
           height: 52px;
           border-radius: 16px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: #2D1B14;
-          box-shadow: 0 6px 15px rgba(0,0,0,0.4);
+          display: flex; align-items: center; justify-content: center;
+          color: #2D1B14; box-shadow: 0 6px 15px rgba(0,0,0,0.4);
         }
 
         .logo-text {
@@ -284,7 +281,7 @@ const Dashboard: React.FC = () => {
           font-weight: 800;
           margin-top: 24px;
           color: #E6BEAE;
-          border: 1px solid rgba(255, 255, 255, 0.15);
+          border: 1px solid rgba(255,255,255,0.15);
           letter-spacing: 1.5px;
         }
 

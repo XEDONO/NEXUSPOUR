@@ -80,7 +80,7 @@ export function parseChecklistPDFLines(lines: string[]): ChecklistParsed[] {
     }
 
     if (/[:：]\s*$/.test(line) || /^(opening|closing|daily|weekly|monthly)\b/i.test(line)) {
-      currentSection = toTitleCase(line.replace(/[:：]\s*$/, ''));
+      currentSection = toTitleCase(line.replace(/[:：]\s*$/, '').toLowerCase());
       continue;
     }
 
