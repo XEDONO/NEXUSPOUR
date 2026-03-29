@@ -78,7 +78,7 @@ const Checklist: React.FC = () => {
 
   const fetchData = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/checklists`);
+      const res = await fetch(`${API_BASE_URL}/checklists.php`);
       const data = await res.json();
       setTasks(data);
     } catch (error) {
@@ -104,7 +104,7 @@ const Checklist: React.FC = () => {
 
     const newStatus = !task.completions[currentKey];
 
-    await fetch(`${API_BASE_URL}/checklists/${taskId}/completion`, {
+    await fetch(`${API_BASE_URL}/checklists.php?id=${taskId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ dateKey: currentKey, status: newStatus }),
@@ -114,7 +114,7 @@ const Checklist: React.FC = () => {
 
   const removeTask = async (id: string) => {
     if (window.confirm('Delete this check permanently?')) {
-      await fetch(`${API_BASE_URL}/checklists/${id}`, { method: 'DELETE' });
+      await fetch(`${API_BASE_URL}/checklists.php?id=${id}`, { method: 'DELETE' });
       fetchData();
     }
   };
@@ -129,7 +129,7 @@ const Checklist: React.FC = () => {
       text: addText.trim(),
     };
 
-    await fetch(`${API_BASE_URL}/checklists`, {
+    await fetch(`${API_BASE_URL}/checklists.php`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newTask),
@@ -141,7 +141,7 @@ const Checklist: React.FC = () => {
   };
 
   const purgeAllChecklists = async () => {
-    await fetch(`${API_BASE_URL}/checklists/purge`, { method: 'DELETE' });
+    await fetch(`${API_BASE_URL}/checklists.php?action=purge`, { method: 'DELETE' });
     setShowToast({ show: true, message: 'All checklists purged.', color: 'success' });
     fetchData();
     setShowAdminSidebar(false);

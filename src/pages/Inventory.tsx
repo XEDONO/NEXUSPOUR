@@ -99,7 +99,7 @@ const Inventory: React.FC = () => {
 
   const fetchInventory = () => {
     setIsLoading(true);
-    fetch(`${API_BASE_URL}/inventory`)
+    fetch(`${API_BASE_URL}/inventory.php`)
         .then(res => res.json())
         .then(data => {
             setInventoryItems(data);
@@ -119,7 +119,7 @@ const Inventory: React.FC = () => {
         const lines = await pdfToLines(file);
         const parsedItems = parseStockPDFLines(lines);
         
-        const res = await fetch(`${API_BASE_URL}/inventory/bulk`, {
+        const res = await fetch(`${API_BASE_URL}/inventory.php?action=bulk`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(parsedItems)
@@ -173,7 +173,7 @@ const Inventory: React.FC = () => {
     try {
       const itemsToSave = inventoryItems.filter(item => localChanges.has(item.id));
       const savePromises = itemsToSave.map(item =>
-        fetch(`${API_BASE_URL}/inventory/${item.id}`, {
+        fetch(`${API_BASE_URL}/inventory.php?id=${item.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(item)
@@ -218,7 +218,7 @@ const Inventory: React.FC = () => {
     try {
       const idsToDelete = Array.from(selectedInventoryIds);
       const deletePromises = idsToDelete.map(id =>
-        fetch(`${API_BASE_URL}/inventory/${id}`, {
+        fetch(`${API_BASE_URL}/inventory.php?id=${id}`, {
           method: 'DELETE'
         })
       );
@@ -255,7 +255,7 @@ const Inventory: React.FC = () => {
     if (restockList.length === 0) return;
     
     try {
-      const res = await fetch(`${API_BASE_URL}/restock-lists`, {
+      const res = await fetch(`${API_BASE_URL}/restock-lists.php`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ items: restockList })
@@ -286,7 +286,7 @@ const Inventory: React.FC = () => {
       return;
     }
     try {
-      const res = await fetch(`${API_BASE_URL}/inventory`, {
+      const res = await fetch(`${API_BASE_URL}/inventory.php`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newItem)

@@ -96,11 +96,11 @@ const TempCheck: React.FC = () => {
 
   const fetchData = async () => {
     try {
-      const fridgesRes = await fetch(`${API_BASE_URL}/fridges`);
+      const fridgesRes = await fetch(`${API_BASE_URL}/fridges.php`);
       const fridgesData = await fridgesRes.json();
       setMasterFridges(fridgesData);
 
-      const logsRes = await fetch(`${API_BASE_URL}/logs`);
+      const logsRes = await fetch(`${API_BASE_URL}/logs.php`);
       const logsData = await logsRes.json();
 
       const dailyLogs = logsData.reduce((acc: DailyLog[], log: any) => {
@@ -139,7 +139,7 @@ const TempCheck: React.FC = () => {
     const temp = parseFloat(value);
     const pass = !isNaN(temp) && temp >= fridge.expectedMin && temp <= fridge.expectedMax;
 
-    await fetch(`${API_BASE_URL}/logs`, {
+    await fetch(`${API_BASE_URL}/logs.php`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ date, fridge_id: fridgeId, reading: value, pass }),
@@ -197,7 +197,7 @@ const TempCheck: React.FC = () => {
       expectedMax: maxTemp
     };
 
-    await fetch(`${API_BASE_URL}/fridges`, {
+    await fetch(`${API_BASE_URL}/fridges.php`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newFridge),
@@ -210,7 +210,7 @@ const TempCheck: React.FC = () => {
 
   const deleteFridge = async (id: string) => {
     if (window.confirm('Delete this unit? All historical readings for this unit in the table view will be hidden.')) {
-      await fetch(`${API_BASE_URL}/fridges/${id}`, {
+      await fetch(`${API_BASE_URL}/fridges.php?id=${id}`, {
           method: 'DELETE',
       });
       fetchData();

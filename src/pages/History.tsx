@@ -89,7 +89,7 @@ const History: React.FC = () => {
 
   const viewRestockDetail = async (list: RestockList) => {
     try {
-        const res = await fetch(`${API_BASE_URL}/restock-lists/${list.id}`);
+        const res = await fetch(`${API_BASE_URL}/restock-lists.php?id=${list.id}`);
         if (!res.ok) throw new Error('Could not fetch list details.');
         const detailedList = await res.json();
         setShowRestockDetail(detailedList);
@@ -101,7 +101,7 @@ const History: React.FC = () => {
 
   const fetchSafe = async (endpoint: string) => {
     try {
-      const res = await fetch(`${API_BASE_URL}/${endpoint}`, { cache: 'no-store' });
+      const res = await fetch(`${API_BASE_URL}/${endpoint}.php`, { cache: 'no-store' });
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       return await res.json();
     } catch (e) {
@@ -152,7 +152,7 @@ const History: React.FC = () => {
 
   const deleteDayLogs = async (date: string) => {
     try {
-      const res = await fetch(`${API_BASE_URL}/logs/day/${date}`, {
+      const res = await fetch(`${API_BASE_URL}/logs.php?date=${date}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' }
       });
@@ -170,7 +170,7 @@ const History: React.FC = () => {
 
   const deleteRestockList = async (id: string) => {
     try {
-      const res = await fetch(`${API_BASE_URL}/restock-lists/${id}`, {
+      const res = await fetch(`${API_BASE_URL}/restock-lists.php?id=${id}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' }
       });
