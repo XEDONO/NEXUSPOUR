@@ -529,7 +529,7 @@ const TempCheck: React.FC = () => {
       <IonModal
         isOpen={showAddFridgeModal}
         onDidDismiss={() => setShowAddFridgeModal(false)}
-        cssClass="sheet-modal"
+        className="sheet-modal"
         backdropDismiss={true}
       >
         <div className="m3-dialog-sheet" onClick={e => e.stopPropagation()}>
@@ -559,7 +559,7 @@ const TempCheck: React.FC = () => {
       <IonModal
         isOpen={showManageUnitsModal}
         onDidDismiss={() => setShowManageUnitsModal(false)}
-        cssClass="sheet-modal"
+        className="sheet-modal"
         backdropDismiss={true}
       >
         <div className="m3-dialog-sheet" onClick={e => e.stopPropagation()}>
