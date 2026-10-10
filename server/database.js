@@ -1,6 +1,6 @@
 const mysql = require('mysql2/promise');
 
-// Use environment variables for production, fallback to local for development
+// Standard configuration using variables from .env
 const dbConfig = {
   host: process.env.DB_HOST || 'localhost',
   user: process.env.DB_USER || 'root',
@@ -10,6 +10,10 @@ const dbConfig = {
   connectionLimit: 10,
   queueLimit: 0
 };
+
+console.log(`Initializing database connection...`);
+console.log(`Target Host: ${dbConfig.host}`);
+console.log(`Database: ${dbConfig.database}`);
 
 let pool;
 

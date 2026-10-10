@@ -1,17 +1,27 @@
 <?php
-// Enable error reporting for debugging
+// --- CRITICAL CORS HEADERS ---
+ob_start(); // Prevent any early output from breaking headers
+header("Access-Control-Allow-Origin: http://localhost:5173");
+header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
+header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With");
+header("Access-Control-Allow-Credentials: true");
+
+if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
+    http_response_code(200);
+    exit();
+}
+
+// Enable error reporting
 ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
 // database.php
 
 // --- Connection Details ---
-// Please update the following variables with your MySQL database credentials.
-$servername = "31.11.39.177"; // Or your MySQL server IP/hostname provided by Aruba.it
-$username = "Sql1923175"; // Your MySQL username
-$password = "Hicham1980!"; // Your MySQL password
-$dbname = "Sql1923175_1"; // The name of your database
+$servername = "localhost";
+$username = "root";
+$password = "";
+$dbname = "nexus_pour";
 
 // --- Create Connection ---
 $conn = new mysqli($servername, $username, $password, $dbname);

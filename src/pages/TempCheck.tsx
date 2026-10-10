@@ -8,7 +8,8 @@ import {
   IonProgressBar,
   IonBadge,
   IonButton,
-  IonToast
+  IonToast,
+  IonModal
 } from '@ionic/react';
 import {
   chevronBackOutline,
@@ -84,10 +85,11 @@ const TempCheck: React.FC = () => {
   const [newFridgeMinTemp, setNewFridgeMinTemp] = useState('2');
   const [newFridgeMaxTemp, setNewFridgeMaxTemp] = useState('5');
   const [isLoaded, setIsLoaded] = useState(false);
+  const [isAdding, setIsAdding] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null);
   const [showFabMenu, setShowFabMenu] = useState(false);
-  const [showToast, setShowToast] = useState(false);
+  const [showToast, setShowToast] = useState({ show: false, message: '', color: 'success' });
 
   useEffect(() => {
     fetchData();
@@ -149,8 +151,8 @@ const TempCheck: React.FC = () => {
   };
 
   const saveToHistory = async () => {
-    setShowToast(true);
-    fetchData();
+    setShowToast({ show: true, message: 'History updated.', color: 'success' });
+    fetchData(); // Re-fetch data to ensure latest state is reflected
   };
 
   const getReadingValue = (date: string, fridgeId: string) => {
@@ -188,24 +190,50 @@ const TempCheck: React.FC = () => {
     const name = newFridgeName.trim();
     const minTemp = parseFloat(newFridgeMinTemp);
     const maxTemp = parseFloat(newFridgeMaxTemp);
-    if (!name || isNaN(minTemp) || isNaN(maxTemp)) return;
 
+    if (!name || isNaN(minTemp) || isNaN(maxTemp)) {
+      setShowToast({ show: true, message: 'Please enter valid name and temperatures.', color: 'danger' });
+      return;
+    }
+
+    setIsAdding(true);
     const newFridge: FridgeTemplate = {
-      id: `fridge-${Date.now()}`,
+      id: `fridge-${Date.now()}`, 
       location: name,
       expectedMin: minTemp,
       expectedMax: maxTemp
     };
 
-    await fetch(`${API_BASE_URL}/fridges.php`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newFridge),
-    });
+    try {
+      const res = await fetch(`${API_BASE_URL}/fridges.php`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newFridge),
+      });
 
-    setShowAddFridgeModal(false);
-    setNewFridgeName('');
-    fetchData();
+      if (!res.ok) {
+        let errorMsg = 'Failed to add unit.';
+        try {
+          const errorData = await res.json();
+          errorMsg = errorData.message || errorMsg;
+        } catch (e) {
+          // If response is not JSON
+        }
+        throw new Error(errorMsg);
+      }
+
+      setShowAddFridgeModal(false);
+      setNewFridgeName('');
+      setNewFridgeMinTemp('2'); 
+      setNewFridgeMaxTemp('5'); 
+      await fetchData(); 
+      setShowToast({ show: true, message: 'New unit added successfully!', color: 'success' });
+    } catch (error: any) {
+      console.error("Error adding fridge:", error);
+      setShowToast({ show: true, message: `Error adding unit: ${error.message}`, color: 'danger' });
+    } finally {
+      setIsAdding(false);
+    }
   };
 
   const deleteFridge = async (id: string) => {
@@ -227,7 +255,7 @@ const TempCheck: React.FC = () => {
   const progress = totalCount > 0 ? recordedCount / totalCount : 0;
 
   return (
-    <IonPage>
+    <IonPage className="tc-page-root">
       {/* ... style content omitted for brevity, same as original ... */}
       <style>{`
         .tc-page-root {
@@ -361,15 +389,45 @@ const TempCheck: React.FC = () => {
         .tc-page-root .fab-main-m3 { width: 56px; height: 56px; border-radius: 16px; background: var(--m3-primary); color: white; display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 20px rgba(45, 27, 20, 0.3); border: none; }
         .tc-page-root .fab-action-m3 { width: 48px; height: 48px; border-radius: 12px; background: white; color: var(--m3-primary); display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 15px rgba(45, 27, 20, 0.2); border: 1px solid #E1E3D3; }
 
-        .tc-page-root .m3-input { width: 100%; padding: 16px; border-radius: 12px; background: #F8F5F2; border: 1px solid #E1E3D3; margin-bottom: 16px; font-weight: 700; color: #2D1B14; text-align: center; }
-        .tc-page-root .modal-blur-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); backdrop-filter: blur(5px); z-index: 4000; display: flex; align-items: center; justify-content: center; padding: 24px; }
-        .tc-page-root .m3-dialog-sheet { background: white; border-radius: 24px; padding: 24px; width: 100%; max-width: 360px; box-shadow: 0 15px 35px rgba(0,0,0,0.25); }
+        .tc-page-root .m3-input { width: 100%; padding: 16px; border-radius: 16px; background: #FDFCF4; border: 2px solid #E1E3D3; margin-bottom: 16px; font-weight: 700; color: #2D1B14; text-align: center; transition: border-color 0.2s; }
+        .tc-page-root .m3-input:focus { outline: none; border-color: var(--m3-primary); }
 
         .tc-page-root .unit-manage-item {
           display: flex; justify-content: space-between; align-items: center;
           padding: 14px; background: #F8F5F2; border-radius: 14px; margin-bottom: 10px;
         }
         .tc-page-root .delete-btn-m3 { color: var(--m3-error); font-size: 1.3rem; background: none; border: none; cursor: pointer; }
+
+        ion-modal.sheet-modal::part(backdrop) {
+            background: rgba(45, 27, 20, 0.4);
+            -webkit-backdrop-filter: blur(8px);
+            backdrop-filter: blur(8px);
+        }
+        ion-modal.sheet-modal {
+            --background: transparent;
+            --box-shadow: none;
+        }
+        .m3-dialog-sheet {
+            background: #FDFCF4; /* --m3-surface */
+            border-radius: 28px;
+            padding: 24px;
+            width: 100%;
+            max-width: 380px;
+            box-shadow: 0 10px 40px rgba(45, 27, 20, 0.2);
+            border: 1px solid rgba(45, 27, 20, 0.1);
+        }
+        .modal-header-m3 { text-align: center; margin-bottom: 24px; }
+        .modal-icon-m3 { width: 56px; height: 56px; background: #F8F5F2; border-radius: 18px; display: inline-flex; align-items: center; justify-content: center; margin: 0 auto 16px; color: #2D1B14; border: 1px solid #E1E3D3; }
+        .modal-icon-m3 ion-icon { font-size: 1.8rem; }
+        .modal-title-m3 { margin: 0; font-weight: 900; color: #2D1B14; font-size: 1.6rem; }
+        .modal-subtitle-m3 { margin: 4px 0 0; color: #8D6E63; font-weight: 700; font-size: 0.85rem; }
+        .m3-button-group { display: flex; gap: 12px; margin-top: 24px; }
+        .m3-button { flex: 1; height: 52px; border-radius: 16px; border: none; font-weight: 800; font-size: 0.9rem; cursor: pointer; transition: all 0.2s; }
+        .m3-button-primary { background: #2D1B14; color: white; box-shadow: 0 4px 15px rgba(45, 27, 20, 0.2); }
+        .m3-button-primary:active { transform: translateY(1px); box-shadow: 0 2px 10px rgba(45, 27, 20, 0.2); }
+        .m3-button-secondary { background: #F8F5F2; color: #2D1B14; border: 1px solid #E1E3D3; }
+        .m3-button-secondary:active { background: #E6E1DC; }
+        .m3-button:disabled { opacity: 0.5; cursor: not-allowed; filter: grayscale(1); pointer-events: none; }
       `}</style>
 
       <IonContent scrollY={false} className="tc-page-root">
@@ -455,6 +513,11 @@ const TempCheck: React.FC = () => {
         </div>
       </IonContent>
       
+      {/*
+        IonModal components should be placed outside the main content flow,
+        typically as direct children of IonPage, to ensure they render correctly
+        and are not affected by parent styling or overflow properties.
+      */}
       <nav className="m3-footer-nav">
         <div className="nav-link-m3" onClick={() => history.push('/dashboard')}><div className="nav-pill-m3"><IonIcon icon={home} /></div><span>Home</span></div>
         <div className="nav-link-m3 active"><div className="nav-pill-m3"><IonIcon icon={thermometerOutline} /></div><span>Temps</span></div>
@@ -463,47 +526,68 @@ const TempCheck: React.FC = () => {
         <div className="nav-link-m3" onClick={() => history.push('/allergens')}><div className="nav-pill-m3"><IonIcon icon={warningOutline} /></div><span>Allergens</span></div>
       </nav>
 
-      {showAddFridgeModal && (
-        <div className="modal-blur-overlay" onClick={() => setShowAddFridgeModal(false)}>
-          <div className="m3-dialog-sheet" onClick={e => e.stopPropagation()}>
-            <h2 style={{ fontWeight: 900, margin: '0 0 24px', fontSize: '1.8rem', textAlign: 'center', color: '#2D1B14' }}>Add New Unit</h2>
-            <input placeholder="Equipment Name" value={newFridgeName} onChange={e => setNewFridgeName(e.target.value)} className="m3-input" />
-            <div style={{ display: 'flex', gap: '16px' }}>
-              <input type="number" value={newFridgeMinTemp} onChange={e => setNewFridgeMinTemp(e.target.value)} className="m3-input" placeholder="Min Temp" />
-              <input type="number" value={newFridgeMaxTemp} onChange={e => setNewFridgeMaxTemp(e.target.value)} className="m3-input" placeholder="Max Temp" />
-            </div>
-            <div style={{ display: 'flex', gap: 12, marginTop: 32 }}>
-              <button style={{ flex: 1, height: '52px', borderRadius: '14px', border: 'none', fontWeight: 800, background: '#F8F5F2', color: '#2D1B14' }} onClick={() => setShowAddFridgeModal(false)}>CANCEL</button>
-              <button style={{ flex: 1, height: '52px', borderRadius: '14px', border: 'none', fontWeight: 800, background: '#2D1B14', color: 'white' }} onClick={addFridge}>CREATE</button>
-            </div>
+      <IonModal
+        isOpen={showAddFridgeModal}
+        onDidDismiss={() => setShowAddFridgeModal(false)}
+        cssClass="sheet-modal"
+        backdropDismiss={true}
+      >
+        <div className="m3-dialog-sheet" onClick={e => e.stopPropagation()}>
+          <header className="modal-header-m3">
+              <div className="modal-icon-m3">
+                  <IonIcon icon={addOutline} />
+              </div>
+              <h3 className="modal-title-m3">Add New Unit</h3>
+              <p className="modal-subtitle-m3">Define a new fridge or freezer to monitor.</p>
+          </header>
+          <input placeholder="Equipment Name" value={newFridgeName} onChange={e => setNewFridgeName(e.target.value)} className="m3-input" autoFocus />
+          <div style={{ display: 'flex', gap: '16px' }}>
+            <input type="number" value={newFridgeMinTemp} onChange={e => setNewFridgeMinTemp(e.target.value)} className="m3-input" placeholder="Min Temp" />
+            <input type="number" value={newFridgeMaxTemp} onChange={e => setNewFridgeMaxTemp(e.target.value)} className="m3-input" placeholder="Max Temp" />
+          </div>
+          <div className="m3-button-group">
+            <button className="m3-button m3-button-secondary" onClick={() => setShowAddFridgeModal(false)}>CANCEL</button>
+            <button
+              className="m3-button m3-button-primary"
+              onClick={addFridge}
+              disabled={isAdding || !newFridgeName.trim() || isNaN(parseFloat(newFridgeMinTemp)) || isNaN(parseFloat(newFridgeMaxTemp))}
+            >{isAdding ? 'CREATING...' : 'CREATE'}</button>
           </div>
         </div>
-      )}
+      </IonModal>
 
-      {showManageUnitsModal && (
-        <div className="modal-blur-overlay" onClick={() => setShowManageUnitsModal(false)}>
-          <div className="m3-dialog-sheet" onClick={e => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
-              <h3 style={{ fontWeight: 900, margin: 0, fontSize: '1.8rem' }}>Active Units</h3>
-              <button className="round-btn-m3" style={{ background: '#F8F5F2', color: '#2D1B14', border: 'none' }} onClick={() => setShowManageUnitsModal(false)}><IonIcon icon={closeOutline} /></button>
-            </div>
-            <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
-              {masterFridges.map(f => (
-                <div key={f.id} className="unit-manage-item">
-                  <div>
-                    <div style={{ fontWeight: 900, color: '#2D1B14' }}>{f.location}</div>
-                    <div style={{ fontSize: '11px', fontWeight: 700, color: '#8D6E63' }}>{f.expectedMin}° to {f.expectedMax}°C</div>
-                  </div>
-                  <button className="delete-btn-m3" onClick={() => deleteFridge(f.id)}><IonIcon icon={trashOutline} /></button>
+      <IonModal
+        isOpen={showManageUnitsModal}
+        onDidDismiss={() => setShowManageUnitsModal(false)}
+        cssClass="sheet-modal"
+        backdropDismiss={true}
+      >
+        <div className="m3-dialog-sheet" onClick={e => e.stopPropagation()}>
+          <header className="modal-header-m3">
+              <div className="modal-icon-m3">
+                  <IonIcon icon={constructOutline} />
+              </div>
+              <h3 className="modal-title-m3">Manage Units</h3>
+              <p className="modal-subtitle-m3">Edit or remove existing temperature units.</p>
+          </header>
+          <div style={{ maxHeight: '300px', overflowY: 'auto', padding: '0 4px' }}>
+            {masterFridges.map(f => (
+              <div key={f.id} className="unit-manage-item">
+                <div>
+                  <div style={{ fontWeight: 900, color: '#2D1B14' }}>{f.location}</div>
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: '#8D6E63' }}>{f.expectedMin}° to {f.expectedMax}°C</div>
                 </div>
-              ))}
-            </div>
-            <button style={{ width: '100%', height: '56px', borderRadius: '18px', border: 'none', fontWeight: 900, background: '#2D1B14', color: 'white', marginTop: '24px' }} onClick={() => setShowManageUnitsModal(false)}>DONE</button>
+                <button className="delete-btn-m3" onClick={() => deleteFridge(f.id)}><IonIcon icon={trashOutline} /></button>
+              </div>
+            ))}
+          </div>
+          <div className="m3-button-group">
+              <button className="m3-button m3-button-primary" style={{flex: '1 1 100%'}} onClick={() => setShowManageUnitsModal(false)}>DONE</button>
           </div>
         </div>
-      )}
+      </IonModal>
 
-      <IonToast isOpen={showToast} onDidDismiss={() => setShowToast(false)} message="History updated." duration={2000} color="success" icon={checkmarkDoneOutline} position="top" />
+      <IonToast isOpen={showToast.show} onDidDismiss={() => setShowToast({ ...showToast, show: false })} message={showToast.message} duration={2000} color={showToast.color} icon={checkmarkDoneOutline} position="top" />
     </IonPage>
   );
 };
