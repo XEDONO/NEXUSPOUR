@@ -37,7 +37,8 @@ import {
   checkmarkDoneOutline
 } from 'ionicons/icons';
 import { useHistory } from 'react-router-dom';
-import { API_BASE_URL } from '../apiConfig';
+import { db } from '../firebase';
+import { collection, onSnapshot, doc, setDoc, deleteDoc, getDocs } from 'firebase/firestore';
 
 type FridgeTemplate = { id: string; location: string; expectedMin: number; expectedMax: number };
 
@@ -78,6 +79,7 @@ const TempCheck: React.FC = () => {
   const [currentWeekStart, setCurrentWeekStart] = useState(() => getStartOfWeek(new Date()));
   const [logs, setLogs] = useState<DailyLog[]>([]);
   const [masterFridges, setMasterFridges] = useState<FridgeTemplate[]>([]);
+  const [rawLogs, setRawLogs] = useState<any[]>([]);
 
   const [showAddFridgeModal, setShowAddFridgeModal] = useState(false);
   const [showManageUnitsModal, setShowManageUnitsModal] = useState(false);
@@ -92,45 +94,56 @@ const TempCheck: React.FC = () => {
   const [showToast, setShowToast] = useState({ show: false, message: '', color: 'success' });
 
   useEffect(() => {
-    fetchData();
+    const unsubFridges = onSnapshot(collection(db, 'fridges'), (snapshot) => {
+      const fridgesData: FridgeTemplate[] = snapshot.docs.map(docSnap => {
+        const d = docSnap.data();
+        return {
+          id: docSnap.id,
+          location: d.location || '',
+          expectedMin: Number(d.expectedMin ?? 2),
+          expectedMax: Number(d.expectedMax ?? 5)
+        };
+      });
+      setMasterFridges(fridgesData);
+    }, (err) => console.warn('Firestore fridges error:', err));
+
+    const unsubLogs = onSnapshot(collection(db, 'temp_logs'), (snapshot) => {
+      const logsData = snapshot.docs.map(docSnap => docSnap.data());
+      setRawLogs(logsData);
+    }, (err) => console.warn('Firestore temp_logs error:', err));
+
     setIsLoaded(true);
+
+    return () => {
+      unsubFridges();
+      unsubLogs();
+    };
   }, []);
 
-  const fetchData = async () => {
-    try {
-      const fridgesRes = await fetch(`${API_BASE_URL}/fridges.php`);
-      const fridgesData = await fridgesRes.json();
-      setMasterFridges(fridgesData);
+  useEffect(() => {
+    const dailyLogs = rawLogs.reduce((acc: DailyLog[], log: any) => {
+      let dayLog = acc.find(l => l.date === log.date);
+      if (!dayLog) {
+        dayLog = { date: log.date, readings: [] };
+        acc.push(dayLog);
+      }
+      const fridge = masterFridges.find((f: FridgeTemplate) => f.id === log.fridge_id);
+      if (fridge) {
+        dayLog.readings.push({
+          id: fridge.id,
+          location: fridge.location,
+          expectedMin: fridge.expectedMin,
+          expectedMax: fridge.expectedMax,
+          reading: log.reading || '',
+          timestamp: log.date,
+          pass: !!log.pass
+        });
+      }
+      return acc;
+    }, []);
 
-      const logsRes = await fetch(`${API_BASE_URL}/logs.php`);
-      const logsData = await logsRes.json();
-
-      const dailyLogs = logsData.reduce((acc: DailyLog[], log: any) => {
-          let dayLog = acc.find(l => l.date === log.date);
-          if (!dayLog) {
-              dayLog = { date: log.date, readings: [] };
-              acc.push(dayLog);
-          }
-          const fridge = fridgesData.find((f: FridgeTemplate) => f.id === log.fridge_id);
-          if (fridge) {
-              dayLog.readings.push({
-                  id: fridge.id,
-                  location: fridge.location,
-                  expectedMin: fridge.expectedMin,
-                  expectedMax: fridge.expectedMax,
-                  reading: log.reading,
-                  timestamp: log.date,
-                  pass: !!log.pass
-              });
-          }
-          return acc;
-      }, []);
-
-      setLogs(dailyLogs);
-    } catch (error) {
-      console.error("Failed to fetch data", error);
-    }
-  };
+    setLogs(dailyLogs);
+  }, [rawLogs, masterFridges]);
 
   const weekDays = useMemo(() => getWeekDays(currentWeekStart), [currentWeekStart]);
 
@@ -141,18 +154,38 @@ const TempCheck: React.FC = () => {
     const temp = parseFloat(value);
     const pass = !isNaN(temp) && temp >= fridge.expectedMin && temp <= fridge.expectedMax;
 
-    await fetch(`${API_BASE_URL}/logs.php`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date, fridge_id: fridgeId, reading: value, pass }),
-    });
-
-    fetchData();
+    try {
+      const logDocId = `${date}_${fridgeId}`;
+      await setDoc(doc(db, 'temp_logs', logDocId), {
+        date,
+        fridge_id: fridgeId,
+        reading: value,
+        pass
+      }, { merge: true });
+    } catch (err) {
+      console.error('Error saving temperature log in Firestore:', err);
+    }
   };
 
   const saveToHistory = async () => {
     setShowToast({ show: true, message: 'History updated.', color: 'success' });
-    fetchData(); // Re-fetch data to ensure latest state is reflected
+  };
+
+  const fetchData = async () => {
+    try {
+      const fridgesSnap = await getDocs(collection(db, 'fridges'));
+      setMasterFridges(fridgesSnap.docs.map(d => ({
+        id: d.id,
+        location: d.data().location || '',
+        expectedMin: Number(d.data().expectedMin ?? 2),
+        expectedMax: Number(d.data().expectedMax ?? 5)
+      })));
+      const logsSnap = await getDocs(collection(db, 'temp_logs'));
+      setRawLogs(logsSnap.docs.map(d => d.data()));
+      setShowToast({ show: true, message: 'Data synced.', color: 'success' });
+    } catch (e: any) {
+      console.warn('Sync error:', e);
+    }
   };
 
   const getReadingValue = (date: string, fridgeId: string) => {
@@ -197,39 +230,23 @@ const TempCheck: React.FC = () => {
     }
 
     setIsAdding(true);
+    const fridgeId = `fridge-${Date.now()}`;
     const newFridge: FridgeTemplate = {
-      id: `fridge-${Date.now()}`, 
+      id: fridgeId, 
       location: name,
       expectedMin: minTemp,
       expectedMax: maxTemp
     };
 
     try {
-      const res = await fetch(`${API_BASE_URL}/fridges.php`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(newFridge),
-      });
-
-      if (!res.ok) {
-        let errorMsg = 'Failed to add unit.';
-        try {
-          const errorData = await res.json();
-          errorMsg = errorData.message || errorMsg;
-        } catch (e) {
-          // If response is not JSON
-        }
-        throw new Error(errorMsg);
-      }
-
+      await setDoc(doc(db, 'fridges', fridgeId), newFridge);
       setShowAddFridgeModal(false);
       setNewFridgeName('');
       setNewFridgeMinTemp('2'); 
       setNewFridgeMaxTemp('5'); 
-      await fetchData(); 
       setShowToast({ show: true, message: 'New unit added successfully!', color: 'success' });
     } catch (error: any) {
-      console.error("Error adding fridge:", error);
+      console.error("Error adding fridge to Firestore:", error);
       setShowToast({ show: true, message: `Error adding unit: ${error.message}`, color: 'danger' });
     } finally {
       setIsAdding(false);
@@ -238,10 +255,11 @@ const TempCheck: React.FC = () => {
 
   const deleteFridge = async (id: string) => {
     if (window.confirm('Delete this unit? All historical readings for this unit in the table view will be hidden.')) {
-      await fetch(`${API_BASE_URL}/fridges.php?id=${id}`, {
-          method: 'DELETE',
-      });
-      fetchData();
+      try {
+        await deleteDoc(doc(db, 'fridges', id));
+      } catch (err) {
+        console.error('Error deleting fridge from Firestore:', err);
+      }
     }
   };
 

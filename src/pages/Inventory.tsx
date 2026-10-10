@@ -22,7 +22,8 @@ import {
 import { useHistory } from 'react-router-dom';
 import { pdfToLines } from '../utils/pdf';
 import { parseStockPDFLines } from '../utils/pdfParsers';
-import { API_BASE_URL } from '../apiConfig';
+import { db } from '../firebase';
+import { collection, onSnapshot, doc, setDoc, deleteDoc, addDoc, writeBatch } from 'firebase/firestore';
 import {
   checkmarkDoneCircleOutline, 
   closeCircleOutline, 
@@ -94,22 +95,32 @@ const Inventory: React.FC = () => {
   });
 
   useEffect(() => {
-    fetchInventory();
-  }, []);
-
-  const fetchInventory = () => {
     setIsLoading(true);
-    fetch(`${API_BASE_URL}/inventory.php`)
-        .then(res => res.json())
-        .then(data => {
-            setInventoryItems(data);
-            setIsLoading(false);
-        })
-        .catch(err => {
-            console.error(err);
-            setIsLoading(false);
-        });
-  };
+    const unsub = onSnapshot(collection(db, 'inventory'), (snapshot) => {
+      const items: StockItem[] = snapshot.docs.map(docSnap => {
+        const d = docSnap.data();
+        return {
+          id: docSnap.id,
+          name: d.name || '',
+          qty: Number(d.qty ?? 0),
+          unit: d.unit || 'units',
+          location: d.location || '',
+          category: d.category || '',
+          par: Number(d.par ?? 0),
+          lastUpdated: d.lastUpdated,
+          lastOrderedAt: d.lastOrderedAt,
+          restockCount: Number(d.restockCount ?? 0)
+        };
+      });
+      setInventoryItems(items);
+      setIsLoading(false);
+    }, (err) => {
+      console.warn('Firestore inventory error:', err);
+      setIsLoading(false);
+    });
+
+    return () => unsub();
+  }, []);
   
   const handleFileImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -119,28 +130,17 @@ const Inventory: React.FC = () => {
         const lines = await pdfToLines(file);
         const parsedItems = parseStockPDFLines(lines);
         
-        const res = await fetch(`${API_BASE_URL}/inventory.php?action=bulk`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(parsedItems)
+        const batch = writeBatch(db);
+        parsedItems.forEach(item => {
+          const docRef = doc(collection(db, 'inventory'));
+          batch.set(docRef, {
+            ...item,
+            lastUpdated: new Date().toISOString()
+          });
         });
+        await batch.commit();
 
-        const responseText = await res.text();
-
-        if (!res.ok) {
-            let errorMsg = responseText;
-            try {
-                const errorBody = JSON.parse(responseText);
-                errorMsg = errorBody.message || responseText;
-            } catch (e) {
-                // Not JSON, use raw text
-            }
-            throw new Error(`Failed to import items: ${errorMsg}`);
-        }
-
-        const newItems = JSON.parse(responseText);
-        setInventoryItems(prev => [...prev, ...newItems]);
-        setShowToast({ show: true, message: `${newItems.length} items imported successfully!`, color: 'success' });
+        setShowToast({ show: true, message: `${parsedItems.length} items imported successfully!`, color: 'success' });
 
     } catch (error: any) {
         console.error('Error importing PDF:', error);
@@ -172,15 +172,14 @@ const Inventory: React.FC = () => {
     setIsSaving(true);
     try {
       const itemsToSave = inventoryItems.filter(item => localChanges.has(item.id));
-      const savePromises = itemsToSave.map(item =>
-        fetch(`${API_BASE_URL}/inventory.php?id=${item.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(item)
-        })
-      );
-
-      await Promise.all(savePromises);
+      const batch = writeBatch(db);
+      itemsToSave.forEach(item => {
+        batch.set(doc(db, 'inventory', item.id), {
+          ...item,
+          lastUpdated: new Date().toISOString()
+        }, { merge: true });
+      });
+      await batch.commit();
       setLocalChanges(new Set());
       setShowToast({ show: true, message: 'All inventory changes saved permanently.', color: 'success' });
     } catch (error) {
@@ -216,21 +215,12 @@ const Inventory: React.FC = () => {
     }
 
     try {
-      const idsToDelete = Array.from(selectedInventoryIds);
-      const deletePromises = idsToDelete.map(id =>
-        fetch(`${API_BASE_URL}/inventory.php?id=${id}`, {
-          method: 'DELETE'
-        })
-      );
-
-      await Promise.all(deletePromises);
-
-      setInventoryItems(prev => prev.filter(item => !selectedInventoryIds.has(item.id)));
-      setLocalChanges(prev => {
-        const next = new Set(prev);
-        selectedInventoryIds.forEach(id => next.delete(id));
-        return next;
+      const batch = writeBatch(db);
+      selectedInventoryIds.forEach(id => {
+        batch.delete(doc(db, 'inventory', id));
       });
+      await batch.commit();
+
       setSelectedInventoryIds(new Set());
       setShowToast({ show: true, message: 'Items deleted permanently.', color: 'success' });
     } catch (error) {
@@ -255,12 +245,11 @@ const Inventory: React.FC = () => {
     if (restockList.length === 0) return;
     
     try {
-      const res = await fetch(`${API_BASE_URL}/restock-lists.php`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: restockList })
+      await addDoc(collection(db, 'restock_lists'), {
+        createdAt: new Date().toISOString(),
+        items: restockList,
+        itemCount: restockList.length
       });
-      if (!res.ok) throw new Error('Failed to save list');
       
       setShowToast({ show: true, message: 'Restock list saved to history!', color: 'success' });
       setRestockList([]);
@@ -286,14 +275,10 @@ const Inventory: React.FC = () => {
       return;
     }
     try {
-      const res = await fetch(`${API_BASE_URL}/inventory.php`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newItem)
+      await addDoc(collection(db, 'inventory'), {
+        ...newItem,
+        lastUpdated: new Date().toISOString()
       });
-      if (!res.ok) throw new Error('Failed to add item');
-      const addedItem = await res.json();
-      setInventoryItems(prev => [addedItem, ...prev]);
       setShowAddModal(false);
       setNewItem({ name: '', qty: 0, unit: 'units', location: '', category: '', par: 0 });
       setShowToast({ show: true, message: 'New item added permanently!', color: 'success' });

@@ -33,6 +33,9 @@ import {
 } from 'ionicons/icons';
 import { useHistory } from 'react-router-dom';
 
+import { db } from '../firebase';
+import { collection, onSnapshot, addDoc, deleteDoc, doc, getDocs } from 'firebase/firestore';
+
 type Dish = {
   id: string;
   name: string;
@@ -67,36 +70,66 @@ const Allergens: React.FC = () => {
 
   const [dishes, setDishes] = useState<Dish[]>([]);
 
-  const loadDishes = () => {
-    fetch('http://localhost:3001/api/allergens')
-      .then(res => res.json())
-      .then(data => {
-        const parsedDishes = data.map((d: any) => {
-          let allergens = [];
-          if (typeof d.allergens === 'string') {
-            try {
-              const parsed = JSON.parse(d.allergens);
-              if (Array.isArray(parsed)) {
-                allergens = parsed;
-              }
-            } catch (e) {
-              console.error('Could not parse allergens from string:', d.allergens);
-            }
-          } else if (Array.isArray(d.allergens)) {
-            allergens = d.allergens;
-          }
-          return { ...d, name: d.dish || d.name || '', allergens };
-        });
-        setDishes(parsedDishes);
-      })
-      .catch(console.error);
-  };
-
   useEffect(() => {
     const timer = setTimeout(() => setIsLoaded(true), 150);
-    loadDishes();
-    return () => clearTimeout(timer);
+    const unsubscribe = onSnapshot(collection(db, 'allergens'), (snapshot) => {
+      const parsedDishes = snapshot.docs.map(docSnap => {
+        const data = docSnap.data();
+        let allergens: string[] = [];
+        if (typeof data.allergens === 'string') {
+          try {
+            const parsed = JSON.parse(data.allergens);
+            if (Array.isArray(parsed)) allergens = parsed;
+          } catch {
+            allergens = [];
+          }
+        } else if (Array.isArray(data.allergens)) {
+          allergens = data.allergens;
+        }
+        return {
+          id: docSnap.id,
+          name: data.name || data.dish || '',
+          allergens
+        };
+      });
+      setDishes(parsedDishes);
+    }, (err) => {
+      console.warn('Firestore snapshot error on allergens:', err);
+    });
+
+    return () => {
+      clearTimeout(timer);
+      unsubscribe();
+    };
   }, []);
+
+  const loadDishes = async () => {
+    try {
+      const snapshot = await getDocs(collection(db, 'allergens'));
+      const parsedDishes = snapshot.docs.map(docSnap => {
+        const data = docSnap.data();
+        let allergens: string[] = [];
+        if (typeof data.allergens === 'string') {
+          try {
+            const parsed = JSON.parse(data.allergens);
+            if (Array.isArray(parsed)) allergens = parsed;
+          } catch {
+            allergens = [];
+          }
+        } else if (Array.isArray(data.allergens)) {
+          allergens = data.allergens;
+        }
+        return {
+          id: docSnap.id,
+          name: data.name || data.dish || '',
+          allergens
+        };
+      });
+      setDishes(parsedDishes);
+    } catch (err) {
+      console.warn('Manual refresh error:', err);
+    }
+  };
 
   const filteredDishes = useMemo(() => {
     return dishes.filter(d => d.name.toLowerCase().includes(searchQuery.toLowerCase()));
@@ -108,53 +141,30 @@ const Allergens: React.FC = () => {
     );
   };
 
-  const addDish = () => {
+  const addDish = async () => {
     if (!newDishName.trim()) return;
-    const newDish = {
-      dish: newDishName.trim(),
-      allergens: JSON.stringify(selectedAllergens)
-    };
-    
-    fetch('http://localhost:3001/api/allergens', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newDish)
-    })
-    .then(res => res.json())
-    .then(addedDish => {
-      let allergens = [];
-      if (typeof addedDish.allergens === 'string') {
-        try {
-          const parsed = JSON.parse(addedDish.allergens);
-          if (Array.isArray(parsed)) {
-            allergens = parsed;
-          }
-        } catch (e) {
-          console.error('Could not parse allergens from string:', addedDish.allergens);
-        }
-      } else if (Array.isArray(addedDish.allergens)) {
-        allergens = addedDish.allergens;
-      }
-
-      const dishToAdd = { ...addedDish, name: addedDish.dish || addedDish.name || newDishName.trim(), allergens };
-
-      setDishes(prev => [dishToAdd, ...prev]);
+    try {
+      await addDoc(collection(db, 'allergens'), {
+        dish: newDishName.trim(),
+        name: newDishName.trim(),
+        allergens: selectedAllergens,
+        createdAt: new Date().toISOString()
+      });
       setNewDishName('');
       setSelectedAllergens([]);
       setShowAddDish(false);
-    })
-    .catch(console.error);
+    } catch (err) {
+      console.error('Error adding dish to Firestore:', err);
+    }
   };
 
-  const deleteDish = (id: string) => {
+  const deleteDish = async (id: string) => {
     if (window.confirm('Remove this dish from the allergen matrix?')) {
-      fetch(`http://localhost:3001/api/allergens/${id}`, { method: 'DELETE' })
-      .then(res => {
-        if (res.ok) {
-          setDishes(dishes.filter(d => d.id !== id));
-        }
-      })
-      .catch(console.error);
+      try {
+        await deleteDoc(doc(db, 'allergens', id));
+      } catch (err) {
+        console.error('Error deleting dish from Firestore:', err);
+      }
     }
   };
 

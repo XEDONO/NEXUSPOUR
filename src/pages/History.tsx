@@ -32,7 +32,8 @@ import {
 } from 'ionicons/icons';
 import { useHistory } from 'react-router-dom';
 import ChecklistHistoryTable, { TaskRequirement } from '../components/ChecklistHistoryTable';
-import { API_BASE_URL } from '../apiConfig';
+import { db } from '../firebase';
+import { collection, getDocs, doc, getDoc, deleteDoc, query, where, writeBatch } from 'firebase/firestore';
 
 type RestockListItemDetail = {
   item_name: string;
@@ -89,36 +90,70 @@ const History: React.FC = () => {
 
   const viewRestockDetail = async (list: RestockList) => {
     try {
-        const res = await fetch(`${API_BASE_URL}/restock-lists.php?id=${list.id}`);
-        if (!res.ok) throw new Error('Could not fetch list details.');
-        const detailedList = await res.json();
-        setShowRestockDetail(detailedList);
+      const docSnap = await getDoc(doc(db, 'restock_lists', list.id));
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setShowRestockDetail({
+          id: docSnap.id,
+          createdAt: data.createdAt,
+          itemCount: data.itemCount ?? (data.items?.length || 0),
+          items: data.items || []
+        });
+      } else {
+        setShowRestockDetail(list);
+      }
     } catch (error) {
-        console.error(error);
-        setShowToast({ show: true, message: 'Could not load list details.', color: 'danger' });
-    }
-  };
-
-  const fetchSafe = async (endpoint: string) => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/${endpoint}.php`, { cache: 'no-store' });
-      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-      return await res.json();
-    } catch (e) {
-      console.warn(`Silently handled error fetching ${endpoint}:`, e);
-      return [];
+      console.error(error);
+      setShowToast({ show: true, message: 'Could not load list details.', color: 'danger' });
     }
   };
 
   const loadAllLogs = async () => {
     setIsRefreshing(true);
     try {
-      const [fridgesData, logsData, checklistData, restockData] = await Promise.all([
-        fetchSafe('fridges'),
-        fetchSafe('logs'),
-        fetchSafe('checklists'),
-        fetchSafe('restock-lists')
+      const [fridgesSnap, logsSnap, checklistSnap, restockSnap] = await Promise.all([
+        getDocs(collection(db, 'fridges')),
+        getDocs(collection(db, 'temp_logs')),
+        getDocs(collection(db, 'checklists')),
+        getDocs(collection(db, 'restock_lists'))
       ]);
+
+      const fridgesData: FridgeTemplate[] = fridgesSnap.docs.map(d => ({
+        id: d.id,
+        location: d.data().location || '',
+        expectedMin: Number(d.data().expectedMin ?? 2),
+        expectedMax: Number(d.data().expectedMax ?? 5)
+      }));
+
+      const logsData = logsSnap.docs.map(d => d.data());
+
+      const checklistData = checklistSnap.docs.map(d => {
+        const data = d.data();
+        let completions: Record<string, boolean> = {};
+        if (typeof data.completions === 'string') {
+          try { completions = JSON.parse(data.completions); } catch {}
+        } else if (typeof data.completions === 'object' && data.completions !== null) {
+          completions = data.completions;
+        }
+        return {
+          id: d.id,
+          text: data.text || '',
+          frequency: data.frequency || 'daily',
+          section: data.section || 'General',
+          type: data.type || 'general',
+          completions
+        };
+      });
+
+      const restockData: RestockList[] = restockSnap.docs.map(d => {
+        const data = d.data();
+        return {
+          id: d.id,
+          createdAt: data.createdAt || '',
+          itemCount: data.itemCount ?? (data.items?.length || 0),
+          items: data.items || []
+        };
+      });
 
       const dailyLogs = (logsData || []).reduce((acc: DailyLog[], log: any) => {
         let dayLog = acc.find(l => l.date === log.date);
@@ -126,14 +161,14 @@ const History: React.FC = () => {
             dayLog = { date: log.date, readings: [] };
             acc.push(dayLog);
         }
-        const fridge = (fridgesData || []).find((f: FridgeTemplate) => f.id === log.fridge_id);
+        const fridge = fridgesData.find((f: FridgeTemplate) => f.id === log.fridge_id);
         if (fridge) {
             dayLog.readings.push({
                 id: fridge.id,
                 location: fridge.location,
                 expectedMin: fridge.expectedMin,
                 expectedMax: fridge.expectedMax,
-                reading: log.reading,
+                reading: log.reading || '',
                 timestamp: log.date,
                 pass: !!log.pass
             });
@@ -145,6 +180,8 @@ const History: React.FC = () => {
       setChecklistRequirements(checklistData || []);
       setRestockLists(restockData || []);
       setIsLoaded(true);
+    } catch (e) {
+      console.warn('Error loading logs from Firestore:', e);
     } finally {
       setIsRefreshing(false);
     }
@@ -152,17 +189,13 @@ const History: React.FC = () => {
 
   const deleteDayLogs = async (date: string) => {
     try {
-      const res = await fetch(`${API_BASE_URL}/logs.php?date=${date}`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' }
-      });
-      const result = await res.json();
-      if (res.ok) {
-        setShowToast({ show: true, message: result.message || `Deleted logs for ${date}`, color: 'success' });
-        loadAllLogs();
-      } else {
-        throw new Error(result.message || 'Delete failed');
-      }
+      const q = query(collection(db, 'temp_logs'), where('date', '==', date));
+      const snap = await getDocs(q);
+      const batch = writeBatch(db);
+      snap.docs.forEach(d => batch.delete(d.ref));
+      await batch.commit();
+      setShowToast({ show: true, message: `Deleted logs for ${date}`, color: 'success' });
+      loadAllLogs();
     } catch (error: any) {
       setShowToast({ show: true, message: `Error: ${error.message}`, color: 'danger' });
     }
@@ -170,17 +203,9 @@ const History: React.FC = () => {
 
   const deleteRestockList = async (id: string) => {
     try {
-      const res = await fetch(`${API_BASE_URL}/restock-lists.php?id=${id}`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' }
-      });
-      const result = await res.json();
-      if (res.ok) {
-        setShowToast({ show: true, message: 'Restock list deleted successfully', color: 'success' });
-        loadAllLogs();
-      } else {
-        throw new Error(result.message || 'Delete failed');
-      }
+      await deleteDoc(doc(db, 'restock_lists', id));
+      setShowToast({ show: true, message: 'Restock list deleted successfully', color: 'success' });
+      loadAllLogs();
     } catch (error: any) {
       setShowToast({ show: true, message: `Error: ${error.message}`, color: 'danger' });
     }

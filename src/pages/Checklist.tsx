@@ -40,7 +40,8 @@ import {
   buildOutline
 } from 'ionicons/icons';
 import { useHistory } from 'react-router-dom';
-import { API_BASE_URL } from '../apiConfig';
+import { db } from '../firebase';
+import { collection, onSnapshot, doc, setDoc, deleteDoc, writeBatch, getDocs } from 'firebase/firestore';
 
 type CheckFrequency = 'daily' | 'weekly' | 'monthly';
 type TaskType = 'opening' | 'closing' | 'general';
@@ -73,18 +74,36 @@ const Checklist: React.FC = () => {
   const [showToast, setShowToast] = useState({ show: false, message: '', color: 'success' });
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    const unsubscribe = onSnapshot(collection(db, 'checklists'), (snapshot) => {
+      const loadedTasks: Task[] = snapshot.docs.map(docSnap => {
+        const data = docSnap.data();
+        let completions: Record<string, boolean> = {};
+        if (typeof data.completions === 'string') {
+          try {
+            completions = JSON.parse(data.completions);
+          } catch {
+            completions = {};
+          }
+        } else if (typeof data.completions === 'object' && data.completions !== null) {
+          completions = data.completions;
+        }
 
-  const fetchData = async () => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/checklists.php`);
-      const data = await res.json();
-      setTasks(data);
-    } catch (error) {
-      console.error("Failed to fetch checklists", error);
-    }
-  };
+        return {
+          id: docSnap.id,
+          frequency: data.frequency || 'daily',
+          section: data.section || 'General',
+          text: data.text || '',
+          type: data.type || 'general',
+          completions
+        };
+      });
+      setTasks(loadedTasks);
+    }, (err) => {
+      console.warn('Firestore snapshot error on checklists:', err);
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   const currentKey = useMemo(() => {
     if (activeFrequency === 'daily') return pivotDate.toISOString().split('T')[0];
@@ -103,48 +122,58 @@ const Checklist: React.FC = () => {
     if (!task) return;
 
     const newStatus = !task.completions[currentKey];
+    const updatedCompletions = { ...task.completions, [currentKey]: newStatus };
 
-    await fetch(`${API_BASE_URL}/checklists.php?id=${taskId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dateKey: currentKey, status: newStatus }),
-    });
-    fetchData();
+    try {
+      await setDoc(doc(db, 'checklists', taskId), {
+        completions: updatedCompletions
+      }, { merge: true });
+    } catch (err) {
+      console.error('Error toggling task completion in Firestore:', err);
+    }
   };
 
   const removeTask = async (id: string) => {
     if (window.confirm('Delete this check permanently?')) {
-      await fetch(`${API_BASE_URL}/checklists.php?id=${id}`, { method: 'DELETE' });
-      fetchData();
+      try {
+        await deleteDoc(doc(db, 'checklists', id));
+      } catch (err) {
+        console.error('Error deleting task in Firestore:', err);
+      }
     }
   };
 
   const addTask = async () => {
     if (!addText.trim()) return;
-    const newTask = {
-      id: Date.now().toString(),
-      frequency: addFreq,
-      type: addFreq === 'daily' ? addType : 'general',
-      section: addSection || 'General',
-      text: addText.trim(),
-    };
-
-    await fetch(`${API_BASE_URL}/checklists.php`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newTask),
-    });
-
-    setAddText('');
-    setShowAdd(false);
-    fetchData();
+    const newId = Date.now().toString();
+    try {
+      await setDoc(doc(db, 'checklists', newId), {
+        frequency: addFreq,
+        type: addFreq === 'daily' ? addType : 'general',
+        section: addSection || 'General',
+        text: addText.trim(),
+        completions: {}
+      });
+      setAddText('');
+      setShowAdd(false);
+    } catch (err) {
+      console.error('Error adding task in Firestore:', err);
+    }
   };
 
   const purgeAllChecklists = async () => {
-    await fetch(`${API_BASE_URL}/checklists.php?action=purge`, { method: 'DELETE' });
-    setShowToast({ show: true, message: 'All checklists purged.', color: 'success' });
-    fetchData();
-    setShowAdminSidebar(false);
+    try {
+      const snap = await getDocs(collection(db, 'checklists'));
+      const batch = writeBatch(db);
+      snap.docs.forEach(d => {
+        batch.update(d.ref, { completions: {} });
+      });
+      await batch.commit();
+      setShowToast({ show: true, message: 'All checklists purged.', color: 'success' });
+      setShowAdminSidebar(false);
+    } catch (err) {
+      console.error('Error purging checklists in Firestore:', err);
+    }
   };
 
   const filteredTasks = useMemo(() => {

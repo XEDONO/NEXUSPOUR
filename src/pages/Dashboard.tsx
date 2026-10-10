@@ -30,7 +30,8 @@ import {
 } from 'ionicons/icons';
 import { useHistory } from 'react-router-dom';
 import JSZip from 'jszip';
-import { API_BASE_URL } from '../apiConfig';
+import { db } from '../firebase';
+import { collection, onSnapshot, addDoc, deleteDoc, doc, getDocs, writeBatch } from 'firebase/firestore';
 
 const Dashboard: React.FC = () => {
   const history = useHistory();
@@ -43,13 +44,20 @@ const Dashboard: React.FC = () => {
   const [importFormat, setImportFormat] = useState<'json' | 'zip'>('json');
   const [isLoaded, setIsLoaded] = useState(false);
 
-  const [archivedFiles, setArchivedFiles] = useState<{name: string, data: any, date: string}[]>([]);
+  const [archivedFiles, setArchivedFiles] = useState<{id?: string, name: string, data: any, date: string}[]>([]);
 
   useEffect(() => {
-    fetch(`${API_BASE_URL}/archives`)
-      .then(res => res.json())
-      .then(setArchivedFiles)
-      .catch(err => console.error("Failed to fetch archives", err));
+    const unsub = onSnapshot(collection(db, 'archives'), (snap) => {
+      const items = snap.docs.map(d => ({
+        id: d.id,
+        name: d.data().name || '',
+        data: d.data().data,
+        date: d.data().date || ''
+      }));
+      setArchivedFiles(items);
+    }, (err) => console.warn("Failed to fetch archives", err));
+
+    return () => unsub();
   }, []);
 
   useEffect(() => {
@@ -57,44 +65,62 @@ const Dashboard: React.FC = () => {
     return () => clearTimeout(timer);
   }, []);
 
-  const saveToArchive = (name: string, data: any) => {
-    const newArchive = { name, data, date: new Date().toLocaleString() };
-    fetch(`${API_BASE_URL}/archives`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newArchive)
-    })
-    .then(res => res.json())
-    .then(saved => setArchivedFiles(prev => [saved, ...prev]))
-    .catch(err => console.error("Failed to save archive", err));
+  const saveToArchive = async (name: string, data: any) => {
+    try {
+      await addDoc(collection(db, 'archives'), {
+        name,
+        data,
+        date: new Date().toLocaleString()
+      });
+    } catch (err) {
+      console.error("Failed to save archive", err);
+    }
   };
 
-  const restoreFromArchive = (archive: any) => {
-    fetch(`${API_BASE_URL}/import`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(archive.data)
-    })
-    .then(() => {
+  const restoreFromArchive = async (archive: any) => {
+    try {
+      if (!archive?.data) return;
+      const data = archive.data;
+      for (const [colName, docsList] of Object.entries(data)) {
+        if (Array.isArray(docsList)) {
+          const batch = writeBatch(db);
+          docsList.forEach((item: any) => {
+            const docId = item.id || undefined;
+            const docRef = docId ? doc(db, colName, docId) : doc(collection(db, colName));
+            batch.set(docRef, item, { merge: true });
+          });
+          await batch.commit();
+        }
+      }
       alert('System restored. Reloading...');
       window.location.reload();
-    })
-    .catch(() => alert('Restore failed'));
+    } catch {
+      alert('Restore failed');
+    }
   };
 
-  const deleteArchive = (index: number) => {
+  const deleteArchive = async (index: number) => {
     const archive = archivedFiles[index];
     if (window.confirm('Delete this backup?')) {
-      fetch(`${API_BASE_URL}/archives/${(archive as any).id}`, { method: 'DELETE' })
-      .then(() => setArchivedFiles(prev => prev.filter((_, i) => i !== index)))
-      .catch(err => console.error("Failed to delete archive", err));
+      try {
+        if (archive?.id) {
+          await deleteDoc(doc(db, 'archives', archive.id));
+        }
+      } catch (err) {
+        console.error("Failed to delete archive", err);
+      }
     }
   };
 
   const exportData = async (format: 'json' | 'zip') => {
     try {
-      const res = await fetch(`${API_BASE_URL}/export`);
-      const data = await res.json();
+      const collectionsToExport = ['allergens', 'checklists', 'fridges', 'temp_logs', 'inventory', 'restock_lists'];
+      const data: Record<string, any[]> = {};
+      for (const colName of collectionsToExport) {
+        const snap = await getDocs(collection(db, colName));
+        data[colName] = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      }
+
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
       const jsonStr = JSON.stringify(data, null, 2);
       if (format === 'json') {
@@ -118,7 +144,7 @@ const Dashboard: React.FC = () => {
         a.click();
         URL.revokeObjectURL(url);
       }
-      saveToArchive(`Manual Backup (${timestamp})`, data);
+      await saveToArchive(`Manual Backup (${timestamp})`, data);
       setShowExportFormat(false);
     } catch (err) {
       console.error("Export failed", err);
@@ -131,12 +157,18 @@ const Dashboard: React.FC = () => {
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      await fetch(`${API_BASE_URL}/import`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      });
-      saveToArchive(file.name, data);
+      for (const [colName, docsList] of Object.entries(data)) {
+        if (Array.isArray(docsList)) {
+          const batch = writeBatch(db);
+          docsList.forEach((item: any) => {
+            const docId = item.id || undefined;
+            const docRef = docId ? doc(db, colName, docId) : doc(collection(db, colName));
+            batch.set(docRef, item, { merge: true });
+          });
+          await batch.commit();
+        }
+      }
+      await saveToArchive(file.name, data);
       alert('Import successful and reserved.');
       window.location.reload();
     } catch (err) {
