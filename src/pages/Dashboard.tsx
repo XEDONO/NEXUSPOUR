@@ -9,7 +9,7 @@ import {
   IonRow,
   IonCol,
   IonBadge,
-  IonButton
+  IonFooter
 } from '@ionic/react';
 import {
   thermometerOutline,
@@ -24,9 +24,7 @@ import {
   cafeOutline,
   timeOutline,
   notificationsOutline,
-  chevronForwardOutline,
-  archiveOutline,
-  trashOutline
+  chevronForwardOutline
 } from 'ionicons/icons';
 import { useHistory } from 'react-router-dom';
 import JSZip from 'jszip';
@@ -40,7 +38,6 @@ const Dashboard: React.FC = () => {
   const [showImportFormat, setShowImportFormat] = useState(false);
   const [showAdminSidebar, setShowAdminSidebar] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [showArchive, setShowArchive] = useState(false);
   const [importFormat, setImportFormat] = useState<'json' | 'zip'>('json');
   const [isLoaded, setIsLoaded] = useState(false);
 
@@ -74,41 +71,6 @@ const Dashboard: React.FC = () => {
       });
     } catch (err) {
       console.error("Failed to save archive", err);
-    }
-  };
-
-  const restoreFromArchive = async (archive: any) => {
-    try {
-      if (!archive?.data) return;
-      const data = archive.data;
-      for (const [colName, docsList] of Object.entries(data)) {
-        if (Array.isArray(docsList)) {
-          const batch = writeBatch(db);
-          docsList.forEach((item: any) => {
-            const docId = item.id || undefined;
-            const docRef = docId ? doc(db, colName, docId) : doc(collection(db, colName));
-            batch.set(docRef, item, { merge: true });
-          });
-          await batch.commit();
-        }
-      }
-      alert('System restored. Reloading...');
-      window.location.reload();
-    } catch {
-      alert('Restore failed');
-    }
-  };
-
-  const deleteArchive = async (index: number) => {
-    const archive = archivedFiles[index];
-    if (window.confirm('Delete this backup?')) {
-      try {
-        if (archive?.id) {
-          await deleteDoc(doc(db, 'archives', archive.id));
-        }
-      } catch (err) {
-        console.error("Failed to delete archive", err);
-      }
     }
   };
 
@@ -199,6 +161,7 @@ const Dashboard: React.FC = () => {
           flex-direction: column;
           height: 100vh;
           overflow: hidden;
+          background: #FDFCF4;
         }
 
         .espresso-header {
@@ -329,7 +292,7 @@ const Dashboard: React.FC = () => {
         }
 
         .main-scroll {
-          padding: 20px;
+          padding: 20px 20px 100px;
           margin-top: -30px;
           flex: 1;
           width: 100%;
@@ -337,6 +300,7 @@ const Dashboard: React.FC = () => {
           flex-direction: column;
           align-items: center;
           overflow-y: auto;
+          -webkit-overflow-scrolling: touch;
         }
 
         .grid-max-width {
@@ -359,6 +323,8 @@ const Dashboard: React.FC = () => {
           cursor: pointer;
           border: 1px solid #E1E3D3;
           width: 100%;
+          position: relative;
+          overflow: hidden;
         }
 
         .m3-card-wide.visible { opacity: 1; transform: translateY(0); }
@@ -378,15 +344,18 @@ const Dashboard: React.FC = () => {
 
         .m3-footer-nav {
           background: #ffffff;
-          height: 85px;
+          height: 80px;
           display: flex;
           border-top: 1px solid #E1E3D3;
           padding-bottom: env(safe-area-inset-bottom);
-          box-shadow: 0 -4px 25px rgba(0,0,0,0.05);
+          box-shadow: 0 -10px 40px rgba(0,0,0,0.08);
           width: 100%;
           justify-content: space-around;
-          position: relative;
-          z-index: 100;
+          position: fixed;
+          bottom: 0;
+          left: 0;
+          right: 0;
+          z-index: 1000;
         }
 
         .nav-link-m3 {
@@ -396,31 +365,33 @@ const Dashboard: React.FC = () => {
           align-items: center;
           justify-content: center;
           color: #A1887F;
-          font-size: 0.75rem;
+          font-size: 0.7rem;
           font-weight: 800;
           text-decoration: none;
+          transition: all 0.2s ease;
         }
 
         .nav-link-m3.active { color: #2D1B14; }
 
         .nav-pill-m3 {
-          padding: 4px 24px;
+          padding: 4px 20px;
           border-radius: 100px;
           display: flex;
           align-items: center;
           justify-content: center;
-          transition: all 0.3s ease;
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
           margin-bottom: 4px;
-          width: 64px;
+          width: 56px;
           height: 32px;
         }
 
         .nav-link-m3.active .nav-pill-m3 {
-          background: #2D1B1412;
+          background: #2D1B1415;
           transform: translateY(-2px);
+          width: 64px;
         }
 
-        .nav-link-m3 ion-icon { font-size: 1.6rem; }
+        .nav-link-m3 ion-icon { font-size: 1.5rem; }
 
         .side-sheet {
           position: fixed; top: 0; right: -100%; width: 320px; height: 100%; background: white;
@@ -441,10 +412,23 @@ const Dashboard: React.FC = () => {
           .hero-greet h2 { font-size: 1.8rem; }
           .hero-greet { margin-top: 24px; }
           .status-pill-m3 { padding: 8px 16px; font-size: 0.75rem; margin-top: 16px; }
-          .m3-card-wide { padding: 16px; gap: 16px; border-radius: 24px; }
-          .card-icon-m3 { width: 48px; height: 48px; font-size: 1.8rem; border-radius: 16px; }
-          .card-title-m3 { font-size: 1.1rem; }
-          .card-desc-m3 { font-size: 0.85rem; }
+          
+          .m3-card-wide { 
+            padding: 16px 12px; 
+            gap: 12px; 
+            border-radius: 24px; 
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            min-height: 150px;
+            justify-content: center;
+          }
+          .card-icon-m3 { width: 52px; height: 52px; font-size: 1.8rem; border-radius: 16px; }
+          .card-title-m3 { font-size: 1rem; line-height: 1.2; }
+          .card-desc-m3 { display: none; }
+          .m3-card-wide ion-icon[icon*='chevron'] { display: none; }
+          
+          .main-scroll { padding: 16px 12px 100px; }
           .side-sheet { width: 100%; right: -100%; border-radius: 0; }
         }
       `}</style>
@@ -489,7 +473,7 @@ const Dashboard: React.FC = () => {
               <IonGrid className="p-0">
                 <IonRow>
                   {modules.map((m, i) => (
-                    <IonCol size="12" sizeMd="6" key={i} className="p-2">
+                    <IonCol size="6" sizeMd="6" key={i} className="p-2">
                       <div
                         className={`m3-card-wide ion-activatable ${isLoaded ? 'visible' : ''}`}
                         style={{ transitionDelay: `${0.2 + (i * 0.1)}s` }}
@@ -502,7 +486,7 @@ const Dashboard: React.FC = () => {
                           <h3 className="card-title-m3">{m.title}</h3>
                           <p className="card-desc-m3">{m.desc}</p>
                         </div>
-                        <IonIcon icon={chevronForwardOutline} style={{ color: '#A1887F', fontSize: '1.6rem' }} />
+                        <IonIcon icon={chevronForwardOutline} style={{ color: '#A1887F', fontSize: '1.6rem' }} className="chevron-hide-mobile" />
                         <IonRippleEffect />
                       </div>
                     </IonCol>
@@ -512,8 +496,8 @@ const Dashboard: React.FC = () => {
             </div>
           </main>
 
-          <footer style={{ padding: '40px 20px', textAlign: 'center', opacity: 0.3 }}>
-            <p style={{ margin: 0, fontSize: '0.75rem', fontWeight: 900, color: '#2D1B14', letterSpacing: '4px' }}>NEXUSPOUR • PREMIUM HUB</p>
+          <footer style={{ padding: '40px 20px', textAlign: 'center', opacity: 0.15 }}>
+            <p style={{ margin: 0, fontSize: '0.65rem', fontWeight: 900, color: '#2D1B14', letterSpacing: '4px' }}>NEXUSPOUR • PREMIUM HUB</p>
           </footer>
         </div>
       </IonContent>
