@@ -1,16 +1,15 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 
-// Configuration for Firebase
-// Replace these with your actual Firebase project configuration from Firebase Console:
-// https://console.firebase.google.com/
+// Firebase project configuration for nexus-2aa54
 export const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyDummyKeyForCafeOpsGithubPages000",
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "cafeops-nexuspour.firebaseapp.com",
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "cafeops-nexuspour",
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "cafeops-nexuspour.firebasestorage.app",
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "102938475610",
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:102938475610:web:abcdef1234567890"
+  apiKey: "AIzaSyBHYGOs7HJuRckszw40iEuFFx39ImjFzzg",
+  authDomain: "nexus-2aa54.firebaseapp.com",
+  projectId: "nexus-2aa54",
+  storageBucket: "nexus-2aa54.firebasestorage.app",
+  messagingSenderId: "90186946064",
+  appId: "1:90186946064:web:6bfb7c94c325f261ec9c95",
+  measurementId: "G-QWG030GXRJ"
 };
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
