@@ -30,16 +30,33 @@ import { useHistory } from 'react-router-dom';
 import JSZip from 'jszip';
 import { db } from '../firebase';
 import { collection, onSnapshot, addDoc, deleteDoc, doc, getDocs, writeBatch } from 'firebase/firestore';
+import { useAuth } from '../utils/useAuth';
 
 const Dashboard: React.FC = () => {
   const history = useHistory();
   const fileRef = useRef<HTMLInputElement | null>(null);
+  const { isAuthenticated, userProfile, setRole, isAdmin, isStaff, isSuperAdmin, loginWithCredentials, logout, usersList, addUser, deleteUser } = useAuth();
   const [showExportFormat, setShowExportFormat] = useState(false);
   const [showImportFormat, setShowImportFormat] = useState(false);
   const [showAdminSidebar, setShowAdminSidebar] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
   const [importFormat, setImportFormat] = useState<'json' | 'zip'>('json');
   const [isLoaded, setIsLoaded] = useState(false);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      history.replace('/login');
+    }
+  }, [isAuthenticated]);
+
+  const [loginUser, setLoginUser] = useState('');
+  const [loginPass, setLoginPass] = useState('');
+  const [loginErr, setLoginErr] = useState('');
+
+  const [newUsername, setNewUsername] = useState('');
+  const [newFullName, setNewFullName] = useState('');
+  const [newRole, setNewRole] = useState<'admin' | 'staff'>('staff');
 
   const [archivedFiles, setArchivedFiles] = useState<{id?: string, name: string, data: any, date: string}[]>([]);
 
@@ -451,17 +468,17 @@ const Dashboard: React.FC = () => {
                 <button className="icon-btn-m3" onClick={() => setShowAdminSidebar(true)} aria-label="Settings">
                   <IonIcon icon={settingsOutline} />
                 </button>
-                <IonAvatar style={{ width: '46px', height: '46px', border: '3px solid rgba(255,255,255,0.2)', marginLeft: '4px', boxShadow: '0 4px 10px rgba(0,0,0,0.2)' }}>
-                  <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Coffee" alt="Avatar" />
+                <IonAvatar style={{ width: '46px', height: '46px', border: '3px solid rgba(255,255,255,0.2)', marginLeft: '4px', boxShadow: '0 4px 10px rgba(0,0,0,0.2)', cursor: 'pointer' }} onClick={() => { if (isStaff) { alert("Access Blocked: Role switching is reserved for Admins and Super Admins."); return; } setShowAuthModal(true); }} title="Authentication & Role">
+                  <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${isAdmin ? 'Admin' : 'Staff'}`} alt="Avatar" />
                 </IonAvatar>
               </div>
             </div>
 
             <div className={`hero-greet ${isLoaded ? 'visible' : ''}`}>
-              <h2>Welcome, Xedono</h2>
-              <div className="status-pill-m3">
+              <h2>Welcome, {userProfile.name}</h2>
+              <div className="status-pill-m3" onClick={() => { if (isStaff) { alert("Access Blocked: Role switching is reserved for Admins and Super Admins."); return; } setShowAuthModal(true); }} style={{ cursor: 'pointer' }} title="Click to Switch Role">
                 <div className="pulse-dot"></div>
-                SYSTEM OPERATIONAL
+                {isAdmin ? 'ADMIN / MANAGER ROLE' : 'NORMAL STAFF ROLE'}
               </div>
             </div>
 
@@ -540,14 +557,104 @@ const Dashboard: React.FC = () => {
             <IonIcon icon={timeOutline} style={{ fontSize: '1.8rem', color: '#2D1B14' }} />
             <span style={{ fontWeight: 800, color: '#2D1B14' }}>History Log</span>
           </div>
-          <div className="m3-card-wide" style={{ padding: '20px', borderRadius: '20px', opacity: 1, transform: 'none', margin: 0, boxShadow: 'none', background: '#F8F5F2' }} onClick={() => setShowExportFormat(true)}>
+          <div className="m3-card-wide" style={{ padding: '20px', borderRadius: '20px', opacity: 1, transform: 'none', margin: 0, boxShadow: 'none', background: '#F8F5F2' }} onClick={() => { if (isStaff) { alert("Access Blocked: Backup & Restore requires Admin / Manager role."); } else { setShowExportFormat(true); } }}>
             <IonIcon icon={downloadOutline} style={{ fontSize: '1.8rem', color: '#2D1B14' }} />
             <span style={{ fontWeight: 800, color: '#2D1B14' }}>Backup</span>
           </div>
-          <div className="m3-card-wide" style={{ padding: '20px', borderRadius: '20px', opacity: 1, transform: 'none', margin: 0, boxShadow: 'none', background: '#F8F5F2' }} onClick={() => setShowImportFormat(true)}>
+          <div className="m3-card-wide" style={{ padding: '20px', borderRadius: '20px', opacity: 1, transform: 'none', margin: 0, boxShadow: 'none', background: '#F8F5F2' }} onClick={() => { if (isStaff) { alert("Access Blocked: Backup & Restore requires Admin / Manager role."); } else { setShowImportFormat(true); } }}>
             <IonIcon icon={cloudUploadOutline} style={{ fontSize: '1.8rem', color: '#2D1B14' }} />
             <span style={{ fontWeight: 800, color: '#2D1B14' }}>Restore</span>
           </div>
+
+          <button 
+            style={{ width: '100%', padding: '16px', background: '#F8F5F2', color: '#2D1B14', borderRadius: '16px', fontWeight: 900, fontSize: '0.95rem', cursor: 'pointer', border: '1px solid #E1E3D3', marginTop: '16px' }}
+            onClick={() => {
+              logout();
+              history.push('/login');
+            }}
+          >
+            LOGOUT
+          </button>
+
+          {isSuperAdmin && (
+            <div style={{ marginTop: '20px', borderTop: '2px solid #E1E3D3', paddingTop: '20px' }}>
+              <p style={{ fontWeight: 900, fontSize: '0.9rem', color: '#2D1B14', marginBottom: '12px' }}>🛡️ Super Admin: User Management</p>
+              <input 
+                placeholder="Username" 
+                value={newUsername} 
+                onChange={e => setNewUsername(e.target.value)}
+                style={{ width: '100%', padding: '10px', borderRadius: '10px', border: '1px solid #E1E3D3', marginBottom: '8px', fontSize: '0.9rem' }}
+              />
+              <input 
+                placeholder="Full Name" 
+                value={newFullName} 
+                onChange={e => setNewFullName(e.target.value)}
+                style={{ width: '100%', padding: '10px', borderRadius: '10px', border: '1px solid #E1E3D3', marginBottom: '8px', fontSize: '0.9rem' }}
+              />
+              <select 
+                value={newRole} 
+                onChange={e => setNewRole(e.target.value as any)}
+                style={{ width: '100%', padding: '10px', borderRadius: '10px', border: '1px solid #E1E3D3', marginBottom: '8px', fontSize: '0.9rem', fontWeight: 700 }}
+              >
+                <option value="staff">Normal Staff</option>
+                <option value="admin">Admin / Manager</option>
+              </select>
+              <button 
+                style={{ width: '100%', padding: '12px', background: '#2D1B14', color: 'white', borderRadius: '12px', fontWeight: 900, fontSize: '0.9rem', cursor: 'pointer', marginBottom: '16px' }}
+                onClick={() => {
+                  if (newUsername.trim()) {
+                    addUser(newUsername, newRole, newFullName);
+                    setNewUsername('');
+                    setNewFullName('');
+                    alert("User/Admin added successfully!");
+                  }
+                }}
+              >
+                ADD USER / ADMIN
+              </button>
+
+              <div style={{ maxHeight: '150px', overflowY: 'auto', marginBottom: '20px' }}>
+                {usersList.map(u => (
+                  <div key={u.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: '#F8F5F2', borderRadius: '10px', marginBottom: '6px', fontSize: '0.85rem', fontWeight: 800 }}>
+                    <div>
+                      <div>{u.name} ({u.username})</div>
+                      <span style={{ fontSize: '0.7rem', opacity: 0.6, textTransform: 'uppercase' }}>{u.role}</span>
+                    </div>
+                    <button 
+                      onClick={() => deleteUser(u.id)}
+                      style={{ background: 'none', border: 'none', color: '#B3261E', cursor: 'pointer', fontSize: '1.1rem' }}
+                      title="Delete User"
+                    >
+                      <IonIcon icon={closeOutline} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <button 
+                style={{ width: '100%', padding: '16px', background: '#B3261E', color: 'white', borderRadius: '14px', fontWeight: 900, fontSize: '0.95rem', cursor: 'pointer', boxShadow: '0 8px 20px rgba(179, 38, 30, 0.3)' }}
+                onClick={async () => {
+                  if (window.confirm("⚠️ DANGER EXTREME: Are you absolutely sure you want to nuke all data? This will permanently wipe all database records, temperature logs, checklists, inventory, and archives.")) {
+                    try {
+                      const collectionsToNuke = ['temp_logs', 'checklists', 'inventory', 'allergens', 'fridges', 'restock_lists', 'archives'];
+                      for (const colName of collectionsToNuke) {
+                        const snap = await getDocs(collection(db, colName));
+                        const batch = writeBatch(db);
+                        snap.docs.forEach(d => batch.delete(d.ref));
+                        await batch.commit();
+                      }
+                      alert("System successfully nuked. All database records cleared.");
+                      window.location.reload();
+                    } catch (err: any) {
+                      alert("Error nuking data: " + err.message);
+                    }
+                  }
+                }}
+              >
+                ⚠️ NUKE ALL DATA
+              </button>
+            </div>
+          )}
         </div>
       </aside>
 
@@ -565,6 +672,43 @@ const Dashboard: React.FC = () => {
           </div>
         ))}
       </aside>
+
+      {showAuthModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 5000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px', background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(6px)' }}>
+          <div style={{ borderRadius: '35px', padding: '32px', background: 'white', width: '100%', maxWidth: '420px', boxShadow: '0 20px 50px rgba(0,0,0,0.3)' }}>
+            <h3 style={{ margin: 0, fontWeight: 900, fontSize: '1.8rem', color: '#2D1B14' }}>Authentication</h3>
+            <p style={{ margin: '8px 0 24px', fontSize: '0.9rem', color: '#7D746D', fontWeight: 600 }}>Select your active role for NexusPour operations.</p>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div 
+                onClick={() => setRole('staff')}
+                style={{ padding: '20px', borderRadius: '20px', border: '2px solid', borderColor: isStaff ? '#2D1B14' : '#E1E3D3', background: isStaff ? '#F8F5F2' : 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '16px' }}
+              >
+                <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: '#E6BEAE', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', fontWeight: 900, color: '#2D1B14' }}>👤</div>
+                <div>
+                  <div style={{ fontWeight: 900, fontSize: '1.1rem', color: '#2D1B14' }}>Normal Staff</div>
+                  <div style={{ fontSize: '0.8rem', color: '#7D746D', fontWeight: 600 }}>Log temps, complete checklists, view stock & allergens.</div>
+                </div>
+              </div>
+
+              <div 
+                onClick={() => setRole('admin')}
+                style={{ padding: '20px', borderRadius: '20px', border: '2px solid', borderColor: isAdmin ? '#2D1B14' : '#E1E3D3', background: isAdmin ? '#F8F5F2' : 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '16px' }}
+              >
+                <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: '#2D1B14', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', fontWeight: 900, color: 'white' }}>🛡️</div>
+                <div>
+                  <div style={{ fontWeight: 900, fontSize: '1.1rem', color: '#2D1B14' }}>Admin / Manager</div>
+                  <div style={{ fontSize: '0.8rem', color: '#7D746D', fontWeight: 600 }}>Full access: backups, fridge units, history, and data purging.</div>
+                </div>
+              </div>
+            </div>
+
+            <button style={{ width: '100%', padding: '16px', background: '#2D1B14', color: 'white', borderRadius: '18px', fontWeight: 900, fontSize: '1rem', marginTop: '24px', boxShadow: '0 10px 25px rgba(45, 27, 20, 0.3)', cursor: 'pointer' }} onClick={() => setShowAuthModal(false)}>
+              CONTINUE
+            </button>
+          </div>
+        </div>
+      )}
 
       {(showImportFormat || showExportFormat) && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 4000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px', background: 'rgba(0,0,0,0.4)' }}>

@@ -4,13 +4,13 @@ import { IonReactRouter } from '@ionic/react-router';
 import { createHashHistory } from 'history';
 
 /* Import Pages */
+import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import TempCheck from './pages/TempCheck';
 import History from './pages/History';
 import Inventory from './pages/Inventory';
 import Checklist from './pages/Checklist';
 import Allergens from './pages/Allergens';
-// Settings page removed per user request
 
 /* Core CSS */
 import '@ionic/react/css/core.css';
@@ -27,6 +27,9 @@ const App: React.FC = () => (
   <IonApp className="bg-gray-900">
     <IonReactRouter history={hashHistory}>
       <IonRouterOutlet>
+        <Route exact path="/login">
+          <Login />
+        </Route>
         <Route exact path="/dashboard">
           <Dashboard />
         </Route>
@@ -42,12 +45,11 @@ const App: React.FC = () => (
         <Route exact path="/allergens">
           <Allergens />
         </Route>
-        {/* settings route removed */}
         <Route exact path="/checklist">
           <Checklist />
         </Route>
         <Route exact path="/">
-          <Redirect to="/dashboard" />
+          <Redirect to="/login" />
         </Route>
       </IonRouterOutlet>
     </IonReactRouter>

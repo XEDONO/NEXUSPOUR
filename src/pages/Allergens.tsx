@@ -35,6 +35,7 @@ import { useHistory } from 'react-router-dom';
 
 import { db } from '../firebase';
 import { collection, onSnapshot, addDoc, deleteDoc, doc, getDocs } from 'firebase/firestore';
+import { useAuth } from '../utils/useAuth';
 
 type Dish = {
   id: string;
@@ -61,6 +62,7 @@ const ALLERGENS = [
 
 const Allergens: React.FC = () => {
   const history = useHistory();
+  const { isStaff, isAdmin } = useAuth();
   const [isLoaded, setIsLoaded] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddDish, setShowAddDish] = useState(false);
@@ -159,6 +161,10 @@ const Allergens: React.FC = () => {
   };
 
   const deleteDish = async (id: string) => {
+    if (isStaff) {
+      alert("Access Blocked: Purge / Delete Data requires Admin / Manager role.");
+      return;
+    }
     if (window.confirm('Remove this dish from the allergen matrix?')) {
       try {
         await deleteDoc(doc(db, 'allergens', id));

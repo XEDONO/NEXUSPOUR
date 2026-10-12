@@ -42,6 +42,7 @@ import {
 import { useHistory } from 'react-router-dom';
 import { db } from '../firebase';
 import { collection, onSnapshot, doc, setDoc, deleteDoc, writeBatch, getDocs } from 'firebase/firestore';
+import { useAuth } from '../utils/useAuth';
 
 type CheckFrequency = 'daily' | 'weekly' | 'monthly';
 type TaskType = 'opening' | 'closing' | 'general';
@@ -57,6 +58,7 @@ type Task = {
 
 const Checklist: React.FC = () => {
   const history = useHistory();
+  const { isStaff, isAdmin } = useAuth();
   const [pivotDate, setPivotDate] = useState(new Date());
   const [showAdminSidebar, setShowAdminSidebar] = useState(false);
 
@@ -134,6 +136,10 @@ const Checklist: React.FC = () => {
   };
 
   const removeTask = async (id: string) => {
+    if (isStaff) {
+      alert("Access Blocked: Purge / Delete Data requires Admin / Manager role.");
+      return;
+    }
     if (window.confirm('Delete this check permanently?')) {
       try {
         await deleteDoc(doc(db, 'checklists', id));
@@ -162,6 +168,10 @@ const Checklist: React.FC = () => {
   };
 
   const purgeAllChecklists = async () => {
+    if (isStaff) {
+      alert("Access Blocked: Purge / Delete Data requires Admin / Manager role.");
+      return;
+    }
     try {
       const snap = await getDocs(collection(db, 'checklists'));
       const batch = writeBatch(db);

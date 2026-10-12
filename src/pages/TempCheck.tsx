@@ -39,6 +39,7 @@ import {
 import { useHistory } from 'react-router-dom';
 import { db } from '../firebase';
 import { collection, onSnapshot, doc, setDoc, deleteDoc, getDocs } from 'firebase/firestore';
+import { useAuth } from '../utils/useAuth';
 
 type FridgeTemplate = { id: string; location: string; expectedMin: number; expectedMax: number };
 
@@ -76,6 +77,7 @@ const getWeekDays = (startDate: Date) => {
 
 const TempCheck: React.FC = () => {
   const history = useHistory();
+  const { isStaff, isAdmin } = useAuth();
   const [currentWeekStart, setCurrentWeekStart] = useState(() => getStartOfWeek(new Date()));
   const [logs, setLogs] = useState<DailyLog[]>([]);
   const [masterFridges, setMasterFridges] = useState<FridgeTemplate[]>([]);
@@ -220,6 +222,10 @@ const TempCheck: React.FC = () => {
   };
 
   const addFridge = async () => {
+    if (isStaff) {
+      alert("Access Blocked: Managing fridge units requires Admin / Manager role.");
+      return;
+    }
     const name = newFridgeName.trim();
     const minTemp = parseFloat(newFridgeMinTemp);
     const maxTemp = parseFloat(newFridgeMaxTemp);
@@ -254,6 +260,10 @@ const TempCheck: React.FC = () => {
   };
 
   const deleteFridge = async (id: string) => {
+    if (isStaff) {
+      alert("Access Blocked: Managing fridge units requires Admin / Manager role.");
+      return;
+    }
     if (window.confirm('Delete this unit? All historical readings for this unit in the table view will be hidden.')) {
       try {
         await deleteDoc(doc(db, 'fridges', id));
@@ -520,8 +530,8 @@ const TempCheck: React.FC = () => {
           {showFabMenu && (
             <>
               <button className="fab-action-m3" onClick={saveToHistory} aria-label="Save to History"><IonIcon icon={saveOutline} /></button>
-              <button className="fab-action-m3" onClick={() => {setShowAddFridgeModal(true); setShowFabMenu(false);}} aria-label="Add Unit"><IonIcon icon={addOutline} /></button>
-              <button className="fab-action-m3" onClick={() => {setShowManageUnitsModal(true); setShowFabMenu(false);}} aria-label="Manage Units"><IonIcon icon={constructOutline} /></button>
+              <button className="fab-action-m3" onClick={() => { if (isStaff) { alert("Access Blocked: Managing fridge units requires Admin / Manager role."); } else { setShowAddFridgeModal(true); setShowFabMenu(false); } }} aria-label="Add Unit"><IonIcon icon={addOutline} /></button>
+              <button className="fab-action-m3" onClick={() => { if (isStaff) { alert("Access Blocked: Managing fridge units requires Admin / Manager role."); } else { setShowManageUnitsModal(true); setShowFabMenu(false); } }} aria-label="Manage Units"><IonIcon icon={constructOutline} /></button>
             </>
           )}
           <div style={{ display: 'flex', gap: '12px' }}>

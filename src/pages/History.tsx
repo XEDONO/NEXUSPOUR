@@ -34,6 +34,7 @@ import { useHistory } from 'react-router-dom';
 import ChecklistHistoryTable, { TaskRequirement } from '../components/ChecklistHistoryTable';
 import { db } from '../firebase';
 import { collection, getDocs, doc, getDoc, deleteDoc, query, where, writeBatch } from 'firebase/firestore';
+import { useAuth } from '../utils/useAuth';
 
 type RestockListItemDetail = {
   item_name: string;
@@ -67,6 +68,7 @@ type DailyLog = {
 };
 
 const History: React.FC = () => {
+  const { isStaff, isAdmin } = useAuth();
   const [logs, setLogs] = useState<DailyLog[]>([]);
   const [checklistRequirements, setChecklistRequirements] = useState<TaskRequirement[]>([]);
   const [restockLists, setRestockLists] = useState<RestockList[]>([]);
@@ -188,6 +190,10 @@ const History: React.FC = () => {
   };
 
   const deleteDayLogs = async (date: string) => {
+    if (isStaff) {
+      alert("Access Blocked: Audit history is Read Only for Normal Staff.");
+      return;
+    }
     try {
       const q = query(collection(db, 'temp_logs'), where('date', '==', date));
       const snap = await getDocs(q);
@@ -202,6 +208,10 @@ const History: React.FC = () => {
   };
 
   const deleteRestockList = async (id: string) => {
+    if (isStaff) {
+      alert("Access Blocked: Audit history is Read Only for Normal Staff.");
+      return;
+    }
     try {
       await deleteDoc(doc(db, 'restock_lists', id));
       setShowToast({ show: true, message: 'Restock list deleted successfully', color: 'success' });

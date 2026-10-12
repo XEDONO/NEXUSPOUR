@@ -24,6 +24,7 @@ import { pdfToLines } from '../utils/pdf';
 import { parseStockPDFLines } from '../utils/pdfParsers';
 import { db } from '../firebase';
 import { collection, onSnapshot, doc, setDoc, deleteDoc, addDoc, writeBatch } from 'firebase/firestore';
+import { useAuth } from '../utils/useAuth';
 import {
   checkmarkDoneCircleOutline, 
   closeCircleOutline, 
@@ -71,6 +72,7 @@ type RestockListItem = {
 const Inventory: React.FC = () => {
   const history = useHistory();
   const fileRef = useRef<HTMLInputElement | null>(null);
+  const { isStaff, isAdmin } = useAuth();
   
   // All inventory items from the database
   const [inventoryItems, setInventoryItems] = useState<StockItem[]>([]);
@@ -208,6 +210,10 @@ const Inventory: React.FC = () => {
   };
 
   const handleDeleteSelected = async () => {
+    if (isStaff) {
+      alert("Access Blocked: Purge / Delete Data requires Admin / Manager role.");
+      return;
+    }
     if (selectedInventoryIds.size === 0) return;
 
     if (!window.confirm(`Are you sure you want to permanently delete ${selectedInventoryIds.size} items?`)) {
